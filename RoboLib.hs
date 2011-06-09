@@ -34,8 +34,9 @@ subMinVal x = map (map (-min_val +)) x
 	min_val = minimum . map minimum $ x
 
 -- Some types to make life easier...
+type PlateId = String
 data Well = Well { wRow :: Char , wColumn :: Int } deriving (Eq, Show, Ord)
-data ColonyId = ColonyId { cPlate :: Int, cWell :: Well } deriving (Eq, Show, Ord)
+data ColonyId = ColonyId { cPlate :: PlateId, cWell :: Well } deriving (Eq, Show, Ord)
 
 data Measurement = Measurement { mColonyId :: ColonyId, mTime :: DateTime , mType :: String, mDesc :: String, mVal :: Double } deriving (Eq, Show)
 
@@ -54,7 +55,7 @@ wellColumn = zipWith Well ['a'..'h'] . repeat
 
 readExpLine :: [String] -> Measurement
 readExpLine m = Measurement { 
-		    mColonyId = ColonyId { cPlate = read $ m !! 0, cWell = wellFromStr (m !! 3) },
+		    mColonyId = ColonyId { cPlate = m !! 0, cWell = wellFromStr (m !! 3) },
 		    mTime = fromSeconds . read $ m !! 2,
 		    mType = m !! 1,
 		    mDesc = "",
@@ -201,10 +202,14 @@ plotMesToODByGroup ms groups m_type (low, len) mfn = do
 mesOfWell :: Well -> [Measurement] -> [Measurement]
 mesOfWell w ms = filter (\x -> mWell x == w) ms
 
+minIdx :: (Ord a) => [a] -> Int
+minIdx xs = fromJust . findIndex ((==) . minimum $ xs) $ xs
+
 odLimits :: [Double] -> (Int,Int) -- assumes list of OD measurements sorted time-wise.
 odLimits ms = (low,high)
     where
-	low = length ms - (fromJust . findIndex (< odThreshold) . reverse $ ms)
+	rms = reverse ms
+	low = length ms - (fromMaybe (minIdx rms) . findIndex (< odThreshold) $ rms)
 	high = length ms - (fromJust . findIndex (< upper_limit ms) . reverse $ ms)
 	upper_limit x = (minimum x + maximum x / 2)
 
