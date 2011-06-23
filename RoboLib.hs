@@ -20,11 +20,13 @@ import Data.CSV
 import Data.Either (rights)
 import Data.Function (on)
 import Data.List
+import Data.Map ((!))
 import Data.Maybe
 import Data.DateTime (fromSeconds, toSqlString, DateTime, toSeconds)
 import qualified Data.Vector.Unboxed as DVU
 import qualified Statistics.KernelDensity as KD
 import qualified Char as C
+import qualified Data.Map as M
 import System (getArgs)
 
 -- reduce minimal value from entire matrix assuming it is inherent auto flourecence.
@@ -39,6 +41,9 @@ data Well = Well { wRow :: Char , wColumn :: Int } deriving (Eq, Show, Ord)
 data ColonyId = ColonyId { cPlate :: PlateId, cWell :: Well } deriving (Eq, Show, Ord)
 
 data Measurement = Measurement { mColonyId :: ColonyId, mTime :: DateTime , mType :: String, mDesc :: String, mVal :: Double } deriving (Eq, Show)
+
+changePlate :: String -> Measurement -> Measurement
+changePlate np ms = ms {mColonyId = ((mColonyId ms) {cPlate = np})}
 
 mWell :: Measurement -> Well
 mWell = cWell . mColonyId
@@ -71,12 +76,18 @@ loadPlateExpData filename = do
     return . map readExpLine . tail $ file_data -- first entry is the column description and cannot be parsed
 
 allWells96 = concat . zipWith map (map Well ['a'..'h']) $ (repeat [1..12])
+odLiveThreshold = 0.2
 odThreshold = 0.08
+
+monothonic :: [Double] -> Bool
+monothonic (x:y:ys) = x <= y && monothonic (y:ys)
+monothonic xs = True
 
 liveWell :: [Measurement] -> Bool -- returns whether measurements taken from a given well indicate that it grew.
 liveWell ms
     | 1 < (length . nub . map mWell $ ms) = error $ "measurments for more than one well given" ++ show ms
-    | otherwise = last sorted_vals > odThreshold
+    | null ms = False
+    | otherwise = last sorted_vals > odLiveThreshold
 	where
 	    sorted_vals =  map mVal . sortBy (compare `on` mTime) . filter ((==) "OD600" . mType) $ ms
 
@@ -233,7 +244,7 @@ expLevelPerPlate ms mt wells = [ (w,zip mt . map (expLevel $ mesOfWell w ms) $ m
 
 makePlotGridData :: [(Double,Double)] -> String -> Int -> (PlotStyle, [(Double,Double)])
 makePlotGridData data_set plate c =
-    (defaultStyle {plotType = Points, lineSpec = CustomStyle [LineTitle plate, LineType c]},data_set)
+    (defaultStyle {plotType = Points, lineSpec = CustomStyle [LineTitle plate, PointType c, PointSize 2]},data_set)
 
 intensityGridPoints :: (String, String) -> [Measurement] -> [(Double,Double)]
 intensityGridPoints (xlabel, ylabel) ms = [ (snd . head . snd $ x, snd . last . snd $ x) | x <- exp_levels]
@@ -244,14 +255,38 @@ plotIntensityGrid :: [Measurement] -> (String, String) -> Maybe FilePath -> IO (
 plotIntensityGrid ms (xtype,ytype) mfn = plotPathsStyle plot_attrs plot_lines
     where
 	data_sets = map (intensityGridPoints (xtype,ytype)) $ by_plate
-	by_plate = groupBy ((==) `on` mPlate) . sortBy (compare `on` mPlate) $ ms
+	by_plate = groupBy ((==) `on` mPlate) ms -- . sortBy (compare `on` mPlate) $ ms
 	plates = map (mPlate . head) by_plate
 	plot_lines = zipWith3 makePlotGridData data_sets plates [1..]
-	plot_attrs = [XLabel xtype, YLabel ytype, XRange (2,6), YRange (2,6)] ++ file_options
+	plot_attrs = [XLabel xtype, YLabel ytype, XRange (0,6), YRange (0,6)] ++ file_options
 	file_options = if isJust mfn
 			then [ Custom "terminal" ["svg", "size 1000,1000"], Custom "output" ["\"" ++ fromJust mfn ++ "\""]]
 			else []
-	
+minMesVal = 10 -- this is the minimal legal value of a measurement. this needs further inspection.
+
+avgVals :: [String] -> [Well] -> [Measurement] -> M.Map String Double
+avgVals types cWells mes = M.fromList . map (\x -> (x,avg_val x)) $ types
+    where
+	avg_val s = sum (cmes s) / genericLength (cmes s)
+	cmes s = map mVal . by_mtype s . by_wells cWells $ mes
+	by_wells ws = filter (\x -> mWell x `elem` ws)
+	by_mtype t = filter (\x -> mType x == t)
+
+normalizeReads :: [String] -> [Well] -> [Measurement] -> [Measurement]
+normalizeReads _ [] m = m
+normalizeReads types cWells mes = [ x {mVal = new_val x} | x <- mes] 
+    where
+	avg_vals = avgVals types cWells mes
+	new_val x = if mType x `elem` types then corrected_val x else mVal x
+	corrected_val x = max minMesVal (mVal x - (avg_vals ! mType x))
+
+plotIntensityGridByGroup :: [Measurement] -> [(String,[Well])] -> (String,String) -> Maybe FilePath -> IO ()
+plotIntensityGridByGroup ms gr vals fp
+    | (length . nub . map mPlate $ ms) > 1 = error "this function works only on single plate measurements"
+    | otherwise = plotIntensityGrid (concat . zipWith renameByWell gr . repeat $ ms) vals fp
+	where
+	    renameByWell (name,wells) ms = map (changePlate name) . filter (\x -> mWell x `elem` wells) $ ms
+
 -- given a list of measurements at optimal od's (Each entry is a list of the different measurements for a plate/well at its optimal od) return the values of the measurements of a given type (MCherry, OD600 etc.)
 getMesVals :: [[Measurement]] -> String -> [Double]
 getMesVals mes_at_opt_od m_type = map mVal . concatMap (filter ((==) m_type . mType)) $ mes_at_opt_od
@@ -277,6 +312,76 @@ control2 :: [(String,[Well])]
 control2 = sort $ ("YFP-a", zipWith Well (repeat 'a') [1..6]) : 
 	    [ ("YFP-" ++ [C.chr $ 1 + C.ord x], zipWith Well (repeat x) [1..6]) | x <- ['b'..'e']] ++
 	    [ ("YFP-b", zipWith Well (repeat 'f') [1..6]) ]
+
+bestOfBest2 :: [(String,[Well])]
+bestOfBest2 = [
+		("mA",[Well 'a' 11, Well 'a' 12]),
+		("mB",[Well 'b' 11, Well 'b' 12]),
+		("mC",[Well 'c' 11, Well 'c' 12]),
+		("mD",[Well 'd' 11, Well 'd' 12]),
+		("yA",[Well 'e' 12]),
+		("yB",[Well 'f' 12]),
+		("yC",[Well 'g' 12]),
+		("yD",[Well 'h' 12]),
+		("anchor-D4(A?)",[Well 'e' 11]),
+		("anchor-G1(AD)",[Well 'f' 11]),
+		("anchor-A11(??)",[Well 'g' 11]),
+		("anchor-G11(CA)",[Well 'h' 11]),
+		("Low - stop codon (C7,C8,E7,H11)",[Well 'f' 1,Well 'h' 2, Well 'e' 4, Well 'a' 4]),
+		("AD", [Well 'a' 1, Well 'a' 3, Well 'b' 5]),
+		("CA", [Well 'd' 3, Well 'b' 2]),
+		("DA", [Well 'g' 5, Well 'd' 1]),
+		("DC", [Well 'f' 4, Well 'c' 6, Well 'd' 4]),
+		("DD", [Well 'f' 5, Well 'g' 3]),
+		("CD", [Well 'h' 4, Well 'b' 3, Well 'b' 4, Well 'd' 5,Well 'e' 2]),
+		("DDframeshift", [Well 'h' 1]),
+		("CstopC", [Well 'e' 1]),
+		("CFP-A", [Well 'a' 10]),
+		("Inert", [Well 'e' 6, Well 'f' 6, Well 'g' 6]),
+		("New Colonies", concatMap (zipWith Well ['a'..'h'] . repeat) [7..10] \\ [Well 'a' 10]),
+		("Unmapped", [Well 'a' 2,Well 'a' 5,Well 'a' 6,Well 'b' 1,Well 'b' 6,Well 'c' 1,Well 'c' 2,Well 'c' 3,Well 'c' 4,Well 'c' 5,Well 'd' 2,Well 'd' 6,Well 'e' 3,Well 'e' 5,Well 'f' 2,Well 'f' 3,Well 'g' 1,Well 'g' 2,Well 'g' 4,Well 'h' 3,Well 'h' 5,Well 'h' 6])]
+
+bObSimple :: [(String,[Well])]
+bObSimple = [
+		("mA-D",[Well 'a' 11, Well 'a' 12,Well 'b' 11, Well 'b' 12, Well 'c' 11, Well 'c' 12,Well 'd' 11, Well 'd' 12]),
+		("yA-D",[Well 'e' 12,Well 'f' 12,Well 'g' 12,Well 'h' 12]),
+		("Stop codon",[Well 'f' 1,Well 'h' 2, Well 'e' 4, Well 'a' 4]),
+		("AD", [Well 'a' 1, Well 'a' 3, Well 'b' 5, Well 'f' 11]),
+		("CA", [Well 'd' 3, Well 'b' 2, Well 'h' 11]),
+		("DA", [Well 'g' 5, Well 'd' 1]),
+		("DC", [Well 'f' 4, Well 'c' 6, Well 'd' 4]),
+		("DD", [Well 'f' 5, Well 'g' 3, Well 'h' 1]),
+		("CD", [Well 'h' 4, Well 'b' 3, Well 'b' 4, Well 'd' 5,Well 'e' 2]),
+		("CC", [Well 'e' 1]),
+		("Inert", [Well 'e' 6, Well 'f' 6, Well 'g' 6, Well 'a' 10]),
+		("Unmapped", [Well 'a' 2,Well 'a' 5,Well 'a' 6,Well 'b' 1,Well 'b' 6,Well 'c' 1,Well 'c' 2,Well 'c' 3,Well 'c' 4,Well 'c' 5,Well 'd' 2,Well 'd' 6,Well 'e' 3,Well 'e' 5,Well 'f' 2,Well 'f' 3,Well 'g' 1,Well 'g' 2,Well 'g' 4,Well 'h' 3,Well 'h' 5,Well 'h' 6,Well 'e' 11, Well 'g' 11] ++ (concatMap (zipWith Well ['a'..'h'] . repeat) [7..10] \\ [Well 'a' 10]))]
+
+pairsAC206 :: [(String,[Well])]
+pairsAC206 = [
+		("AC",zipWith Well ['a'..'h'] (repeat 1)),
+		("BC",zipWith Well ['a'..'h'] (repeat 2)),
+		("CC",zipWith Well ['a'..'h'] (repeat 3)),
+		("DC",zipWith Well ['a'..'h'] (repeat 4)),
+		("EC",zipWith Well ['a'..'h'] (repeat 5)),
+		("AC",zipWith Well ['a'..'h'] (repeat 6)),
+		("YA", zipWith Well ['a','b'] (repeat 7)),
+		("YB", zipWith Well ['c','d'] (repeat 7)),
+		("YC", zipWith Well ['e','f'] (repeat 7)),
+		("YD", zipWith Well ['g','h'] (repeat 7)),
+		("YE", zipWith Well ['a','b'] (repeat 8)),
+		("YZ", zipWith Well ['c','d'] (repeat 8)),
+		("mA", zipWith Well ['e','f'] (repeat 8)),
+		("mB", zipWith Well ['g','h'] (repeat 8)),
+		("mC", zipWith Well ['a','b'] (repeat 9)),
+		("mD", zipWith Well ['c','d'] (repeat 9)),
+		("mE", zipWith Well ['e','f'] (repeat 9)),
+		("mZ", zipWith Well ['g','h'] (repeat 9)),
+		("inert", zipWith Well ['a','b'] (repeat 10)),
+		("media", zipWith Well ['c','d'] (repeat 10)),
+		("empty", zipWith Well ['e','f'] (repeat 10)),
+		("mE",zipWith Well ['a'..'h'] (repeat 11))
+	    ]
+		
 --plotMesOptODKDHist :: [Measurement] -> String -> IO ()
 --plotMesOptODKDHist ms m_type = do
 
