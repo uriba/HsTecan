@@ -54,9 +54,6 @@ wellFromStr :: String -> Well
 wellFromStr s = Well { wRow = ['a'..'h'] !! fst well_ind , wColumn = snd well_ind + 1 }
     where well_ind = read s :: (Int, Int)
 
-wellColumn :: Int -> [Well]
-wellColumn = zipWith Well ['a'..'h'] . repeat
-
 readExpLine :: [String] -> Measurement
 readExpLine m = Measurement { 
 		    mColonyId = ColonyId { cPlate = m !! 0, cWell = wellFromStr (m !! 3) },
@@ -74,7 +71,10 @@ loadPlateExpData filename = do
     let file_data = head . rights . return $ file_data'
     return . map readExpLine . tail $ file_data -- first entry is the column description and cannot be parsed
 
-allWells96 = concat . zipWith map (map Well ['a'..'h']) $ (repeat [1..12])
+wellColumn :: Int -> [Well]
+wellColumn = zipWith Well ['a'..'h'] . repeat
+
+allWells96 = concatMap wellColumn [1..12]
 
 odLiveThreshold = 0.2
 odThreshold = 0.08
