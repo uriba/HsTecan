@@ -6,7 +6,6 @@ module RoboLib (
     histData,
     histDataDefRange,
     kdHist,
-    filterRelevantODs,
     groupByColony,
     plotMesData,
     plotMesDataByGroup,
@@ -29,7 +28,7 @@ import qualified Char as C
 import qualified Data.Map as M
 import System (getArgs)
 
--- reduce minimal value from entire matrix assuming it is inherent auto flourecence.
+-- reduce minimal value from entire matrix assuming it is inherent background (mostly usable for OD).
 subMinVal :: [[Double]] -> [[Double]]
 subMinVal x = map (map (-min_val +)) x
     where
@@ -76,12 +75,9 @@ loadPlateExpData filename = do
     return . map readExpLine . tail $ file_data -- first entry is the column description and cannot be parsed
 
 allWells96 = concat . zipWith map (map Well ['a'..'h']) $ (repeat [1..12])
+
 odLiveThreshold = 0.2
 odThreshold = 0.08
-
-monothonic :: [Double] -> Bool
-monothonic (x:y:ys) = x <= y && monothonic (y:ys)
-monothonic xs = True
 
 liveWell :: [Measurement] -> Bool -- returns whether measurements taken from a given well indicate that it grew.
 liveWell ms
@@ -93,15 +89,6 @@ liveWell ms
 
 liveWells :: [Measurement] -> [Well]
 liveWells ms = [ x | x <- allWells96, liveWell . filter ((==) x . mWell) $ ms] 
-
--- given a set of OD reads picks the first read that is above 1/3 the gap between the minimal and maximal OD, assuming it represents exponential growth phase.
--- could be improve to include some sanity checks
-findRelevantOdIndex :: [Double] -> Maybe Int
-findRelevantOdIndex d = fmap ((+) 1 . (-) (length d)) . findIndex (< middle_value) . reverse $ d
-    where
-	middle_value = (min_val + max_val) / 3
-	min_val = minimum d
-	max_val = maximum d
 
 findRelevantODTimes :: [Measurement] -> (DateTime, DateTime)
 findRelevantODTimes ms = (min_time, max_time)
@@ -145,21 +132,9 @@ kdHist points_num dots = zip points_list values_list
 	points_list = DVU.toList . KD.fromPoints $ points
 	values_list = DVU.toList values
 
--- assumes all measurements are of the same plate/well.
--- assumes measurements are taken in an interval of at most 5 minutes and more than 5 minutes apart
-pickMesByOptOD :: [Measurement] -> [Measurement]
-pickMesByOptOD ms = filter (\x -> inRange (opt_od_time_sec - 300, opt_od_time_sec + 300) . toSeconds . mTime $ x) ms
-    where
-	opt_od_time_sec = toSeconds . mTime . (!!) od_mes . fromJust . findRelevantOdIndex . map mVal $ od_mes
-	od_mes = filter ((==) "OD600" . mType) ms
-
 groupByColony :: [Measurement] -> [[Measurement]]
 groupByColony = groupBy ((==) `on` mColonyId) . sortBy (compare `on` mColonyId)
 
--- for each plate/well - scan it's od's and pick an "optimal" one. return a list of measurements for that plate at these times.
-filterRelevantODs :: [Measurement] -> [[Measurement]]
-filterRelevantODs = map pickMesByOptOD . groupByColony
-	
 sortMesByTime :: String -> [Measurement] -> [Measurement]
 sortMesByTime m_type = sortBy (compare `on` mTime) . filter ((==) m_type . mType)
 
@@ -287,21 +262,6 @@ plotIntensityGridByGroup ms gr vals fp
 	where
 	    renameByWell (name,wells) ms = map (changePlate name) . filter (\x -> mWell x `elem` wells) $ ms
 
--- given a list of measurements at optimal od's (Each entry is a list of the different measurements for a plate/well at its optimal od) return the values of the measurements of a given type (MCherry, OD600 etc.)
-getMesVals :: [[Measurement]] -> String -> [Double]
-getMesVals mes_at_opt_od m_type = map mVal . concatMap (filter ((==) m_type . mType)) $ mes_at_opt_od
-
-plotMesOptODHist :: [Measurement] -> String -> IO ()
-plotMesOptODHist ms m_type = do
-    let mes_at_opt_od = map pickMesByOptOD . groupByColony $ ms
-    let od_data = getMesVals mes_at_opt_od "OD600"
-    let mt_data = getMesVals mes_at_opt_od m_type
-    let dots = map (logBase 10) . zipWith (/) mt_data $ od_data
-    let points_num = 30
-    let hist_data = histDataDefRange points_num dots
-    plotPathStyle [Title (m_type ++ "/od,  log (base 10)," ++ show points_num ++ " steps histogram")]
-	(defaultStyle { plotType = Boxes}) hist_data
-
 control :: Int -> [(String,[Well])]
 control i = [ (name i ++ [x], zipWith Well (repeat x) . cont_ind $ i) | x <- ['a'..'h']]
     where
@@ -384,8 +344,19 @@ pairsAC206 = [
 		
 --plotMesOptODKDHist :: [Measurement] -> String -> IO ()
 --plotMesOptODKDHist ms m_type = do
+{-
+plotMesOptODHist :: [Measurement] -> String -> IO ()
+plotMesOptODHist ms m_type = do
+    let mes_at_opt_od = map pickMesByOptOD . groupByColony $ ms
+    let od_data = getMesVals mes_at_opt_od "OD600"
+    let mt_data = getMesVals mes_at_opt_od m_type
+    let dots = map (logBase 10) . zipWith (/) mt_data $ od_data
+    let points_num = 30
+    let hist_data = histDataDefRange points_num dots
+    plotPathStyle [Title (m_type ++ "/od,  log (base 10)," ++ show points_num ++ " steps histogram")]
+	(defaultStyle { plotType = Boxes}) hist_data
 
-
+-}
 {- probably not relevant anymore
 control :: Int -> [(String,[Well])]
 control i 
