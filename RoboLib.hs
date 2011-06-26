@@ -21,11 +21,13 @@ import Data.Function (on)
 import Data.List
 import Data.Map ((!))
 import Data.Maybe
+import Statistics.Sample (mean, stdDev)
 import Data.DateTime (fromSeconds, toSqlString, DateTime, toSeconds)
 import qualified Data.Vector.Unboxed as DVU
 import qualified Statistics.KernelDensity as KD
 import qualified Char as C
 import qualified Data.Map as M
+import qualified Data.Vector as V
 import System (getArgs)
 
 -- reduce minimal value from entire matrix assuming it is inherent background (mostly usable for OD).
@@ -40,6 +42,9 @@ data Well = Well { wRow :: Char , wColumn :: Int } deriving (Eq, Show, Ord)
 data ColonyId = ColonyId { cPlate :: PlateId, cWell :: Well } deriving (Eq, Show, Ord)
 
 data Measurement = Measurement { mColonyId :: ColonyId, mTime :: DateTime , mType :: String, mDesc :: String, mVal :: Double } deriving (Eq, Show)
+
+data WellType = JustMedia | NoFluorescence | Specimen { sID :: String }
+type PlateDescription = M.Map WellType [Well]
 
 changePlate :: String -> Measurement -> Measurement
 changePlate np ms = ms {mColonyId = ((mColonyId ms) {cPlate = np})}
@@ -78,6 +83,7 @@ allWells96 = concatMap wellColumn [1..12]
 
 odLiveThreshold = 0.2
 odThreshold = 0.08
+odBackground = 0.04
 
 liveWell :: [Measurement] -> Bool -- returns whether measurements taken from a given well indicate that it grew.
 liveWell ms
@@ -85,10 +91,10 @@ liveWell ms
     | null ms = False
     | otherwise = last sorted_vals > odLiveThreshold
 	where
-	    sorted_vals =  map mVal . sortBy (compare `on` mTime) . filter ((==) "OD600" . mType) $ ms
+	    sorted_vals =  map mVal . sortBy (compare `on` mTime) . filterByType "OD600" $ ms
 
 liveWells :: [Measurement] -> [Well]
-liveWells ms = [ x | x <- allWells96, liveWell . filter ((==) x . mWell) $ ms] 
+liveWells ms = [ x | x <- allWells96, liveWell . filterByWell x $ ms] 
 
 findRelevantODTimes :: [Measurement] -> (DateTime, DateTime)
 findRelevantODTimes ms = (min_time, max_time)
@@ -106,7 +112,7 @@ filterRelevantMesByOptOD :: [Measurement] -> [Measurement] -- assumes measuremen
 filterRelevantMesByOptOD ms = filter (\x -> inRange times . toSeconds . mTime $ x) ms
     where
 	times = (toSeconds min_time, toSeconds max_time)
-	(min_time, max_time) = findRelevantODTimes . filter (\x -> mType x == "OD600") $ ms
+	(min_time, max_time) = findRelevantODTimes . filterByType "OD600" $ ms
 
 inRange :: (Num a, Ord a) => (a,a) -> a -> Bool
 inRange (minV,maxV) v = v >= minV && v < maxV
@@ -136,7 +142,7 @@ groupByColony :: [Measurement] -> [[Measurement]]
 groupByColony = groupBy ((==) `on` mColonyId) . sortBy (compare `on` mColonyId)
 
 sortMesByTime :: String -> [Measurement] -> [Measurement]
-sortMesByTime m_type = sortBy (compare `on` mTime) . filter ((==) m_type . mType)
+sortMesByTime m_type = sortBy (compare `on` mTime) . filterByType m_type
 
 timeConsecMesByPlateWell :: String -> [Measurement] -> [[Double]]
 timeConsecMesByPlateWell m_type  ms = map (map mVal . sortMesByTime m_type) . groupByColony $ ms
@@ -186,7 +192,7 @@ plotMesToODByGroup ms groups m_type (low, len) mfn = do
     plotListsStyle ([Title ("plotting:" ++ m_type ++ " to OD")] ++ fileoptions) plot_data
 
 mesOfWell :: Well -> [Measurement] -> [Measurement]
-mesOfWell w ms = filter (\x -> mWell x == w) ms
+mesOfWell w ms = filterByWell w ms
 
 minIdx :: (Ord a) => [a] -> Int
 minIdx xs = fromJust . findIndex ((==) . minimum $ xs) $ xs
@@ -201,21 +207,22 @@ odLimits ms = (low,high)
 
 maxMes = 70000
 
-expLevel :: [Measurement] -> String -> Double
-expLevel ms mt = sum exp_levels / genericLength exp_levels
+expLevel :: Well -> [Measurement] -> String -> Double
+expLevel w ms mt = mean . V.fromList $ exp_levels
     where
-	od_mes = filter (\x -> mType x == "OD600") $ ms
-	t_mes =  filter (\x -> mType x == mt) $ ms
+	wms = filterByWell w ms
+	od_mes = filterByType "OD600" wms
+	t_mes =  filterByType mt wms
 	vals = map mVal . sortBy (compare `on` mTime)
 	ods = vals od_mes
 	(low,high_od) = odLimits ods
 	high = min high_od . fromMaybe (length t_mes) . findIndex (>= maxMes) . vals $ t_mes
-	norm_ods = map (\x -> x - minimum ods) ods
+	norm_ods = map (\x -> x - odBackground) ods
 	rel_mes = take (high - low) . drop low
 	exp_levels = map (logBase 10) . zipWith (/) (rel_mes . vals $ t_mes) $ (rel_mes norm_ods)
 
 expLevelPerPlate :: [Measurement] -> [String] -> [Well] -> [(Well,[(String,Double)])]
-expLevelPerPlate ms mt wells = [ (w,zip mt . map (expLevel $ mesOfWell w ms) $ mt) | w <- wells ]
+expLevelPerPlate ms mt wells = [ (w,zip mt . map (expLevel w ms) $ mt) | w <- wells ]
 
 makePlotGridData :: [(Double,Double)] -> String -> Int -> (PlotStyle, [(Double,Double)])
 makePlotGridData data_set plate c =
@@ -237,23 +244,27 @@ plotIntensityGrid ms (xtype,ytype) mfn = plotPathsStyle plot_attrs plot_lines
 	file_options = if isJust mfn
 			then [ Custom "terminal" ["svg", "size 1000,1000"], Custom "output" ["\"" ++ fromJust mfn ++ "\""]]
 			else []
-minMesVal = 10 -- this is the minimal legal value of a measurement. this needs further inspection.
+minMesVal = 1 -- this is the minimal legal value of a measurement. this needs further inspection.
 
-avgVals :: [String] -> [Well] -> [Measurement] -> M.Map String Double
-avgVals types cWells mes = M.fromList . map (\x -> (x,avg_val x)) $ types
+filterBy :: (Eq b) => (a -> b) -> b -> [a] -> [a]
+filterBy f v = filter ((==) v . f)
+
+filterByWell = filterBy mWell
+filterByType = filterBy mType
+
+avgVal :: String -> [Well] -> [Measurement] -> Double
+avgVal m_type cWells mes = mean . V.fromList $ cmes
     where
-	avg_val s = sum (cmes s) / genericLength (cmes s)
-	cmes s = map mVal . by_mtype s . by_wells cWells $ mes
+	cmes = map mVal . by_mtype . by_wells cWells $ mes
 	by_wells ws = filter (\x -> mWell x `elem` ws)
-	by_mtype t = filter (\x -> mType x == t)
+	by_mtype = filterByType m_type
 
-normalizeReads :: [String] -> [Well] -> [Measurement] -> [Measurement]
-normalizeReads _ [] m = m
-normalizeReads types cWells mes = [ x {mVal = new_val x} | x <- mes] 
+normalizeReads :: String -> [Well] -> Double -> [Measurement] -> [Measurement]
+normalizeReads m_type cWells min_val mes = [ x {mVal = new_val x} | x <- mes] 
     where
-	avg_vals = avgVals types cWells mes
-	new_val x = if mType x `elem` types then corrected_val x else mVal x
-	corrected_val x = max minMesVal (mVal x - (avg_vals ! mType x))
+	new_val x = if mType x == m_type then corrected_val x else mVal x
+	corrected_val x = max min_val (mVal x - avg_val)
+	avg_val = avgVal m_type cWells mes
 
 plotIntensityGridByGroup :: [Measurement] -> [(String,[Well])] -> (String,String) -> Maybe FilePath -> IO ()
 plotIntensityGridByGroup ms gr vals fp
