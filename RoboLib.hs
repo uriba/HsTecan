@@ -45,6 +45,10 @@ data Measurement = Measurement { mColonyId :: ColonyId, mTime :: DateTime , mTyp
 
 data WellType = JustMedia | NoFluorescence | Specimen { sID :: String }
 type PlateDescription = M.Map WellType [Well]
+-- how to do the control? first normalize all od's by JustMedia.
+-- Then consider normalizing all flourescence by Just media as well?
+-- Then calculate auto fluorescence of NoFluorescence wells (calculate expression level by deviding reads in od)
+-- subtract auto-fluorescence from all expression level measurements (meaning first calculate fl/od and then subtract auto-fl val).
 
 changePlate :: String -> Measurement -> Measurement
 changePlate np ms = ms {mColonyId = ((mColonyId ms) {cPlate = np})}
@@ -240,7 +244,7 @@ plotIntensityGrid ms (xtype,ytype) mfn = plotPathsStyle plot_attrs plot_lines
 	by_plate = groupBy ((==) `on` mPlate) ms -- . sortBy (compare `on` mPlate) $ ms
 	plates = map (mPlate . head) by_plate
 	plot_lines = zipWith3 makePlotGridData data_sets plates [1..]
-	plot_attrs = [XLabel xtype, YLabel ytype, XRange (0,6), YRange (0,6)] ++ file_options
+	plot_attrs = [XLabel xtype, YLabel ytype, XRange (0,7), YRange (0,7)] ++ file_options
 	file_options = if isJust mfn
 			then [ Custom "terminal" ["svg", "size 1000,1000"], Custom "output" ["\"" ++ fromJust mfn ++ "\""]]
 			else []
