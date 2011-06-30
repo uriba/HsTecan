@@ -19,7 +19,7 @@ import Data.CSV
 import Data.Either (rights)
 import Data.Function (on)
 import Data.List
-import Data.Map ((!))
+import Data.Map ((!), Map(..))
 import Data.Maybe
 import Statistics.Sample (mean, stdDev)
 import Data.DateTime (fromSeconds, toSqlString, DateTime, toSeconds)
@@ -44,11 +44,37 @@ data ColonyId = ColonyId { cPlate :: PlateId, cWell :: Well } deriving (Eq, Show
 data Measurement = Measurement { mColonyId :: ColonyId, mTime :: DateTime , mType :: String, mDesc :: String, mVal :: Double } deriving (Eq, Show)
 
 data WellType = JustMedia | NoFluorescence | Specimen { sID :: String }
+    deriving (Show, Eq, Read, Ord)
 type PlateDescription = M.Map WellType [Well]
--- how to do the control? first normalize all od's by JustMedia.
--- Then consider normalizing all flourescence by Just media as well?
--- Then calculate auto fluorescence of NoFluorescence wells (calculate expression level by deviding reads in od)
--- subtract auto-fluorescence from all expression level measurements (meaning first calculate fl/od and then subtract auto-fl val).
+type MesTypeCorrectionVals = Map String Double
+
+minValMap :: MesTypeCorrectionVals
+minValMap = M.fromList [("OD600",0), ("YFP", 1), ("MCHERRY",1),("CFP",1)]
+
+constantBackgroundMap :: [Well] -> [Measurement] -> MesTypeCorrectionVals
+constantBackgroundMap cws ms = M.fromList [(x, bg x) | x <- mesTypes ms]
+    where
+	bg m = meanL . map mVal . filterByType m . filterByWells cws $ ms
+
+subtractConstantBackground :: [Well] -> [Measurement] -> [Measurement]
+subtractConstantBackground cws ms = map (\x -> x {mVal = corrected_mval x}) ms
+    where
+	background_map = constantBackgroundMap cws ms
+	corrected_mval m = max (minValMap ! mType m) (mVal m - (background_map ! mType m))
+
+mesTypes :: [Measurement] -> [String]
+mesTypes = nub . map mType
+
+meanL :: [Double] -> Double
+meanL = mean . V.fromList
+
+autoFluorescenceMap :: [Well] -> [Measurement] -> MesTypeCorrectionVals
+autoFluorescenceMap cws ms = M.fromList [(x, af x) | x <- mesTypes ms]
+    where
+	af x = meanL . zipWith3 expLevel cws (repeat ms) . repeat $ x
+
+normalizePlate :: PlateDescription -> [Measurement] -> [Measurement]
+normalizePlate pd ms = subtractConstantBackground (pd ! JustMedia) ms
 
 changePlate :: String -> Measurement -> Measurement
 changePlate np ms = ms {mColonyId = ((mColonyId ms) {cPlate = np})}
@@ -63,13 +89,15 @@ wellFromStr :: String -> Well
 wellFromStr s = Well { wRow = ['a'..'h'] !! fst well_ind , wColumn = snd well_ind + 1 }
     where well_ind = read s :: (Int, Int)
 
+maxMes = 70000
+
 readExpLine :: [String] -> Measurement
 readExpLine m = Measurement { 
 		    mColonyId = ColonyId { cPlate = m !! 0, cWell = wellFromStr (m !! 3) },
 		    mTime = fromSeconds . read $ m !! 2,
 		    mType = m !! 1,
 		    mDesc = "",
-		    mVal = if m !! 4 == "nan" then 70000 else read (m !! 4)
+		    mVal = if m !! 4 == "nan" then maxMes else read (m !! 4)
 		}
 
 -- assume CSV format is each row is:
@@ -86,8 +114,7 @@ wellColumn = zipWith Well ['a'..'h'] . repeat
 allWells96 = concatMap wellColumn [1..12]
 
 odLiveThreshold = 0.2
-odThreshold = 0.08
-odBackground = 0.04
+odThreshold = 0.04
 
 liveWell :: [Measurement] -> Bool -- returns whether measurements taken from a given well indicate that it grew.
 liveWell ms
@@ -209,10 +236,8 @@ odLimits ms = (low,high)
 	high = length ms - (fromJust . findIndex (< upper_limit ms) . reverse $ ms)
 	upper_limit x = (minimum x + maximum x / 2)
 
-maxMes = 70000
-
 expLevel :: Well -> [Measurement] -> String -> Double
-expLevel w ms mt = mean . V.fromList $ exp_levels
+expLevel w ms mt = meanL exp_levels
     where
 	wms = filterByWell w ms
 	od_mes = filterByType "OD600" wms
@@ -221,26 +246,33 @@ expLevel w ms mt = mean . V.fromList $ exp_levels
 	ods = vals od_mes
 	(low,high_od) = odLimits ods
 	high = min high_od . fromMaybe (length t_mes) . findIndex (>= maxMes) . vals $ t_mes
-	norm_ods = map (\x -> x - odBackground) ods
 	rel_mes = take (high - low) . drop low
-	exp_levels = map (logBase 10) . zipWith (/) (rel_mes . vals $ t_mes) $ (rel_mes norm_ods)
+	exp_levels = zipWith (/) (rel_mes . vals $ t_mes) $ (rel_mes ods)
 
-expLevelPerPlate :: [Measurement] -> [String] -> [Well] -> [(Well,[(String,Double)])]
-expLevelPerPlate ms mt wells = [ (w,zip mt . map (expLevel w ms) $ mt) | w <- wells ]
+normExpLevel :: MesTypeCorrectionVals -> Well -> [Measurement] -> String -> Double
+normExpLevel auto_fluorescence w ms mt = logBase 10 . max (minValMap ! mt) $ (expLevel w ms mt) - (auto_fluorescence ! mt)
+
+expLevelPerPlate :: Bool -> MesTypeCorrectionVals -> [Measurement] -> [String] -> [Well] -> [(Well,[(String,Double)])]
+expLevelPerPlate norm_auto_fl auto_fluorescence ms mt wells = if norm_auto_fl then
+	[ (w,zip mt . map (normExpLevel auto_fluorescence w ms) $ mt) | w <- wells ]
+	else
+	[ (w,zip mt . map (logBase 10 . expLevel w ms) $ mt) | w <- wells ]
 
 makePlotGridData :: [(Double,Double)] -> String -> Int -> (PlotStyle, [(Double,Double)])
 makePlotGridData data_set plate c =
     (defaultStyle {plotType = Points, lineSpec = CustomStyle [LineTitle plate, PointType c, PointSize 2]},data_set)
 
-intensityGridPoints :: (String, String) -> [Measurement] -> [(Double,Double)]
-intensityGridPoints (xlabel, ylabel) ms = [ (snd . head . snd $ x, snd . last . snd $ x) | x <- exp_levels]
+intensityGridPoints :: Bool -> MesTypeCorrectionVals -> (String, String) -> [Measurement] -> [(Double,Double)]
+intensityGridPoints norm_auto_fl auto_fluorescence (xlabel, ylabel) ms =
+    [ (snd . head . snd $ x, snd . last . snd $ x) | x <- exp_levels]
     where
-	exp_levels = expLevelPerPlate ms [xlabel,ylabel] (liveWells ms)
+	exp_levels = expLevelPerPlate norm_auto_fl auto_fluorescence ms [xlabel,ylabel] (liveWells ms)
 
-plotIntensityGrid :: [Measurement] -> (String, String) -> Maybe FilePath -> IO ()
-plotIntensityGrid ms (xtype,ytype) mfn = plotPathsStyle plot_attrs plot_lines
+plotIntensityGrid :: Bool -> PlateDescription -> [Measurement] -> (String, String) -> Maybe FilePath -> IO ()
+plotIntensityGrid norm_auto_fl pd ms (xtype,ytype) mfn = plotPathsStyle plot_attrs plot_lines
     where
-	data_sets = map (intensityGridPoints (xtype,ytype)) $ by_plate
+	data_sets = map (intensityGridPoints norm_auto_fl auto_fluorescence (xtype,ytype) . normalizePlate pd) $ by_plate
+	auto_fluorescence = autoFluorescenceMap (pd ! NoFluorescence) ms
 	by_plate = groupBy ((==) `on` mPlate) ms -- . sortBy (compare `on` mPlate) $ ms
 	plates = map (mPlate . head) by_plate
 	plot_lines = zipWith3 makePlotGridData data_sets plates [1..]
@@ -248,16 +280,21 @@ plotIntensityGrid ms (xtype,ytype) mfn = plotPathsStyle plot_attrs plot_lines
 	file_options = if isJust mfn
 			then [ Custom "terminal" ["svg", "size 1000,1000"], Custom "output" ["\"" ++ fromJust mfn ++ "\""]]
 			else []
-minMesVal = 1 -- this is the minimal legal value of a measurement. this needs further inspection.
 
 filterBy :: (Eq b) => (a -> b) -> b -> [a] -> [a]
 filterBy f v = filter ((==) v . f)
 
+filterByWell :: Well -> [Measurement] -> [Measurement]
 filterByWell = filterBy mWell
+
+filterByType :: String -> [Measurement] -> [Measurement]
 filterByType = filterBy mType
 
+filterByWells :: [Well] -> [Measurement] -> [Measurement]
+filterByWells ws = concat . zipWith filterByWell ws . repeat
+
 avgVal :: String -> [Well] -> [Measurement] -> Double
-avgVal m_type cWells mes = mean . V.fromList $ cmes
+avgVal m_type cWells mes = meanL cmes
     where
 	cmes = map mVal . by_mtype . by_wells cWells $ mes
 	by_wells ws = filter (\x -> mWell x `elem` ws)
@@ -270,10 +307,10 @@ normalizeReads m_type cWells min_val mes = [ x {mVal = new_val x} | x <- mes]
 	corrected_val x = max min_val (mVal x - avg_val)
 	avg_val = avgVal m_type cWells mes
 
-plotIntensityGridByGroup :: [Measurement] -> [(String,[Well])] -> (String,String) -> Maybe FilePath -> IO ()
-plotIntensityGridByGroup ms gr vals fp
+plotIntensityGridByGroup :: Bool -> PlateDescription -> [Measurement] -> [(String,[Well])] -> (String,String) -> Maybe FilePath -> IO ()
+plotIntensityGridByGroup norm_auto_fl pd ms gr vals fp
     | (length . nub . map mPlate $ ms) > 1 = error "this function works only on single plate measurements"
-    | otherwise = plotIntensityGrid (concat . zipWith renameByWell gr . repeat $ ms) vals fp
+    | otherwise = plotIntensityGrid norm_auto_fl pd (concat . zipWith renameByWell gr . repeat $ ms) vals fp
 	where
 	    renameByWell (name,wells) ms = map (changePlate name) . filter (\x -> mWell x `elem` wells) $ ms
 
@@ -331,32 +368,55 @@ bObSimple = [
 		("Inert", [Well 'e' 6, Well 'f' 6, Well 'g' 6, Well 'a' 10]),
 		("Unmapped", [Well 'a' 2,Well 'a' 5,Well 'a' 6,Well 'b' 1,Well 'b' 6,Well 'c' 1,Well 'c' 2,Well 'c' 3,Well 'c' 4,Well 'c' 5,Well 'd' 2,Well 'd' 6,Well 'e' 3,Well 'e' 5,Well 'f' 2,Well 'f' 3,Well 'g' 1,Well 'g' 2,Well 'g' 4,Well 'h' 3,Well 'h' 5,Well 'h' 6,Well 'e' 11, Well 'g' 11] ++ (concatMap (zipWith Well ['a'..'h'] . repeat) [7..10] \\ [Well 'a' 10]))]
 
-pairsAC206 :: [(String,[Well])]
-pairsAC206 = [
-		("AC",zipWith Well ['a'..'h'] (repeat 1)),
-		("BC",zipWith Well ['a'..'h'] (repeat 2)),
-		("CC",zipWith Well ['a'..'h'] (repeat 3)),
-		("DC",zipWith Well ['a'..'h'] (repeat 4)),
-		("EC",zipWith Well ['a'..'h'] (repeat 5)),
-		("AC",zipWith Well ['a'..'h'] (repeat 6)),
-		("YA", zipWith Well ['a','b'] (repeat 7)),
-		("YB", zipWith Well ['c','d'] (repeat 7)),
-		("YC", zipWith Well ['e','f'] (repeat 7)),
-		("YD", zipWith Well ['g','h'] (repeat 7)),
-		("YE", zipWith Well ['a','b'] (repeat 8)),
-		("YZ", zipWith Well ['c','d'] (repeat 8)),
-		("mA", zipWith Well ['e','f'] (repeat 8)),
-		("mB", zipWith Well ['g','h'] (repeat 8)),
-		("mC", zipWith Well ['a','b'] (repeat 9)),
-		("mD", zipWith Well ['c','d'] (repeat 9)),
-		("mE", zipWith Well ['e','f'] (repeat 9)),
-		("mZ", zipWith Well ['g','h'] (repeat 9)),
-		("inert", zipWith Well ['a','b'] (repeat 10)),
-		("media", zipWith Well ['c','d'] (repeat 10)),
-		("empty", zipWith Well ['e','f'] (repeat 10)),
-		("mE",zipWith Well ['a'..'h'] (repeat 11))
-	    ]
-		
+pairsC :: [(String,[Well])]
+pairsC = [
+    ("AC", zipWith Well ['a'..'g'] . repeat $ 1),
+    -- ("A2", zipWith Well ['a'..'g'] . repeat $ 2),
+    ("BC", zipWith Well ['a'..'g'] . repeat $ 3),
+    --("B2", zipWith Well ['a'..'g'] . repeat $ 4),
+    ("CC", zipWith Well ['a'..'g'] . repeat $ 5),
+    --("C2", zipWith Well ['a'..'g'] . repeat $ 6),
+    ("DC", zipWith Well ['a'..'g'] . repeat $ 7),
+    --("D2", zipWith Well ['a'..'g'] . repeat $ 8),
+    ("EC", zipWith Well ['a'..'g'] . repeat $ 9),
+    -- ("E2", zipWith Well ['a'..'g'] . repeat $ 10),
+    --("Z1", zipWith Well ['a'..'g'] . repeat $ 11),
+    ("yA", zipWith Well (repeat 'h') [1,2]),
+    ("yB", zipWith Well (repeat 'h') [3,4]),
+    ("yC", zipWith Well (repeat 'h') [5,6]),
+    ("yD", zipWith Well (repeat 'h') [7,8]),
+    ("yE", zipWith Well (repeat 'h') [9,10]),
+    ("yZ", zipWith Well (repeat 'h') [11,12]),
+    ("mC", zipWith Well ['a','b'] . repeat $ 12),
+    ("mD", zipWith Well ['c','d'] . repeat $ 12),
+    ("inert", zipWith Well ['e','f'] . repeat $ 12)]
+    --("inert", [Well 'g' 12])]
+
+plateDescP = M.fromList [(NoFluorescence, zipWith Well ['e','f'] . repeat $ 12),(JustMedia,[Well 'g' 12])]
+
+pairsD :: [(String,[Well])]
+pairsD = [
+    ("AD", zipWith Well ['a'..'g'] . repeat $ 1),
+    --("A2", zipWith Well ['a'..'g'] . repeat $ 2),
+    ("BD", zipWith Well ['a'..'g'] . repeat $ 3),
+    --("B2", zipWith Well ['a'..'g'] . repeat $ 4),
+    --("D1", zipWith Well ['a'..'g'] . repeat $ 5),
+    ("DD", zipWith Well ['a'..'g'] . repeat $ 6),
+    --("E1", zipWith Well ['a'..'g'] . repeat $ 7),
+    ("ED", zipWith Well ['a'..'g'] . repeat $ 8),
+    ("ZD", zipWith Well ['a'..'g'] . repeat $ 9),
+    --("Z2", zipWith Well ['a'..'g'] . repeat $ 10),
+    ("yA", zipWith Well (repeat 'h') [1,2]),
+    ("yB", zipWith Well (repeat 'h') [3,4]),
+    ("yC", zipWith Well (repeat 'h') [5,6]),
+    ("yD", zipWith Well (repeat 'h') [7,8]),
+    ("yE", zipWith Well (repeat 'h') [9,10]),
+    ("yZ", zipWith Well (repeat 'h') [11,12]),
+    ("mC", zipWith Well ['a','b'] . repeat $ 12),
+    ("mD", zipWith Well ['c','d'] . repeat $ 12),
+    ("inert", zipWith Well ['e','f'] . repeat $ 12)]
+    --("inert", [Well 'g' 12])]
+
 --plotMesOptODKDHist :: [Measurement] -> String -> IO ()
 --plotMesOptODKDHist ms m_type = do
 {-
