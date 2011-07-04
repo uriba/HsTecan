@@ -194,15 +194,15 @@ plotMesData ms m_type = do
     let m_vals = timeConsecMesByPlateWell m_type ms
     plotLists [Title ("plotting:" ++ m_type)] m_vals
 
-containsElem :: (Eq a) => [a] -> a -> Bool
-containsElem = flip elem
+has :: (Eq a) => [a] -> a -> Bool
+has = flip elem
 
 makePlotData :: (String, [[Double]]) -> Int -> [(PlotStyle, [Double])]
 makePlotData (desc, vals) c = [ (defaultStyle {lineSpec = CustomStyle [LineTitle desc, LineType c]},x) | x <- vals ]
 
 plotMesDataByGroup :: [Measurement] -> [(String,[Well])] -> String -> Maybe FilePath -> IO()
 plotMesDataByGroup ms groups m_type mfn = do
-    let by_desc = [ (desc, timeConsecMesByPlateWell m_type . filter ((wells `containsElem`) . mWell) $ ms) | (desc,wells) <- groups ]
+    let by_desc = [ (desc, timeConsecMesByPlateWell m_type . filter ((wells `has`) . mWell) $ ms) | (desc,wells) <- groups ]
     let plot_data = concat . zipWith makePlotData by_desc $ [1..]
     let fileoptions = fromMaybe [] . fmap fileOpts $ mfn
     plotListsStyle ([Title ("plotting:" ++ m_type)] ++ fileoptions) plot_data
@@ -216,8 +216,8 @@ makePlotODData (low, len) (desc1, od_vals) (desc2, vals) c
 
 plotMesToODByGroup :: [Measurement] -> [(String,[Well])] -> String -> (Int, Int) -> Maybe FilePath -> IO()
 plotMesToODByGroup ms groups m_type (low, len) mfn = do
-    let by_desc = [ (desc, timeConsecMesByPlateWell m_type . filter ((wells `containsElem`) . mWell) $ ms) | (desc,wells) <- groups ]
-    let od_by_desc = [ (desc, timeConsecMesByPlateWell "OD600" . filter ((wells `containsElem`) . mWell) $ ms) | (desc,wells) <- groups ]
+    let by_desc = [ (desc, timeConsecMesByPlateWell m_type . filter ((wells `has`) . mWell) $ ms) | (desc,wells) <- groups ]
+    let od_by_desc = [ (desc, timeConsecMesByPlateWell "OD600" . filter ((wells `has`) . mWell) $ ms) | (desc,wells) <- groups ]
     let plot_data = concat . zipWith3 (makePlotODData (low, len)) od_by_desc by_desc $ [1..]
     let fileoptions = fromMaybe [] . fmap fileOpts $ mfn
     plotListsStyle ([Title ("plotting:" ++ m_type ++ " to OD")] ++ fileoptions) plot_data
