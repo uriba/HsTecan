@@ -1,15 +1,14 @@
 module RoboLib (
-    subMinVal,
     Well (..),
     Measurement (..),
     loadPlateExpData,
-    histData,
-    histDataDefRange,
-    kdHist,
     groupByColony,
     plotMesData,
     plotMesDataByGroup,
-    wColumn,
+    plotIntensityGrid',
+    plotIntensityGridByGroup',
+    expLevelPerPlate',
+    expLevel,
     )
 where
 import Graphics.Gnuplot.Simple
@@ -27,7 +26,6 @@ import qualified Statistics.KernelDensity as KD
 import qualified Char as C
 import qualified Data.Map as M
 import qualified Data.Vector as V
-import System (getArgs)
 
 -- reduce minimal value from entire matrix assuming it is inherent background (mostly usable for OD).
 subMinVal :: [[Double]] -> [[Double]]
@@ -265,31 +263,48 @@ expLevel w ms mt = meanL exp_levels
 normExpLevel :: MesTypeCorrectionVals -> Well -> [Measurement] -> String -> Double
 normExpLevel auto_fluorescence w ms mt = logBase 10 . max (minValMap ! mt) $ (expLevel w ms mt) - (auto_fluorescence ! mt)
 
-expLevelPerPlate :: Bool -> MesTypeCorrectionVals -> [Measurement] -> [String] -> [Well] -> [(Well,[(String,Double)])]
-expLevelPerPlate norm_auto_fl auto_fluorescence ms mt wells = if norm_auto_fl then
+expLevelPerPlate :: [Measurement] -> [String] -> [Well] -> [(Well,[(String,Double)])]
+expLevelPerPlate ms mt wells = [ (w,zip mt . map (logBase 10 . expLevel w ms) $ mt) | w <- wells ]
+
+expLevelPerPlate' :: MesTypeCorrectionVals -> [Measurement] -> [String] -> [Well] -> [(Well,[(String,Double)])]
+expLevelPerPlate' auto_fluorescence ms mt wells = 
 	[ (w,zip mt . map (normExpLevel auto_fluorescence w ms) $ mt) | w <- wells ]
-	else
-	[ (w,zip mt . map (logBase 10 . expLevel w ms) $ mt) | w <- wells ]
 
 makePlotGridData :: [(Double,Double)] -> String -> Int -> (PlotStyle, [(Double,Double)])
 makePlotGridData data_set plate c =
     (defaultStyle {plotType = Points, lineSpec = CustomStyle [LineTitle plate, PointType c, PointSize 2]},data_set)
 
-intensityGridPoints :: Bool -> MesTypeCorrectionVals -> (String, String) -> [Measurement] -> [(Double,Double)]
-intensityGridPoints norm_auto_fl auto_fluorescence (xlabel, ylabel) ms =
+intensityGridPoints :: (String, String) -> [Measurement] -> [(Double,Double)]
+intensityGridPoints (xlabel, ylabel) ms = [ (snd . head . snd $ x, snd . last . snd $ x) | x <- exp_levels]
+    where
+	exp_levels = expLevelPerPlate ms [xlabel,ylabel] (liveWells ms)
+
+intensityGridPoints' :: MesTypeCorrectionVals -> (String, String) -> [Measurement] -> [(Double,Double)]
+intensityGridPoints' auto_fluorescence (xlabel, ylabel) ms =
     [ (snd . head . snd $ x, snd . last . snd $ x) | x <- exp_levels]
     where
-	exp_levels = expLevelPerPlate norm_auto_fl auto_fluorescence ms [xlabel,ylabel] (liveWells ms)
+	exp_levels = expLevelPerPlate' auto_fluorescence ms [xlabel,ylabel] (liveWells ms)
 
-plotIntensityGrid :: Bool -> PlateDescription -> [Measurement] -> (String, String) -> Maybe FilePath -> IO ()
-plotIntensityGrid norm_auto_fl pd ms (xtype,ytype) mfn = plotPathsStyle plot_attrs plot_lines
+plotIntensityGrid :: [Measurement] -> (String, String) -> Maybe FilePath -> IO ()
+plotIntensityGrid ms (xtype,ytype) mfn = plotPathsStyle plot_attrs plot_lines
     where
-	data_sets = map (intensityGridPoints norm_auto_fl auto_fluorescence (xtype,ytype) . normalizePlate pd) $ by_plate
+	data_sets = map (intensityGridPoints (xtype,ytype)) $ by_plate
+	by_plate = groupBy ((==) `on` mPlate) ms -- . sortBy (compare `on` mPlate) $ ms
+	plates = map (mPlate . head) by_plate
+	plot_lines = zipWith3 makePlotGridData data_sets plates [1..]
+	plot_attrs = [XLabel xtype, YLabel ytype, XRange (0,7), YRange (0,7)] ++ file_options
+	file_options = if isJust mfn
+			then [ Custom "terminal" ["svg", "size 1000,1000"], Custom "output" ["\"" ++ fromJust mfn ++ "\""]]
+			else []
+plotIntensityGrid' :: PlateDescription -> [Measurement] -> (String, String) -> Maybe FilePath -> IO ()
+plotIntensityGrid' pd ms (xtype,ytype) mfn = plotPathsStyle plot_attrs plot_lines
+    where
+	data_sets = map (intensityGridPoints' auto_fluorescence (xtype,ytype) . normalizePlate pd) $ by_plate
 	auto_fluorescence = autoFluorescenceMap (pd ! NoFluorescence) ms
 	by_plate = groupBy ((==) `on` mPlate) ms -- . sortBy (compare `on` mPlate) $ ms
 	plates = map (mPlate . head) by_plate
 	plot_lines = zipWith3 makePlotGridData data_sets plates [1..]
-	plot_attrs = [XLabel xtype, YLabel ytype, XRange (2,6), YRange (2,6)] ++ file_options
+	plot_attrs = [XLabel xtype, YLabel ytype, XRange (0,7), YRange (0,7)] ++ file_options
 	file_options = if isJust mfn
 			then [ Custom "terminal" ["svg", "size 1000,1000"], Custom "output" ["\"" ++ fromJust mfn ++ "\""]]
 			else []
@@ -320,10 +335,17 @@ normalizeReads m_type cWells min_val mes = [ x {mVal = new_val x} | x <- mes]
 	corrected_val x = max min_val (mVal x - avg_val)
 	avg_val = avgVal m_type cWells mes
 
-plotIntensityGridByGroup :: Bool -> PlateDescription -> [Measurement] -> [(String,[Well])] -> (String,String) -> Maybe FilePath -> IO ()
-plotIntensityGridByGroup norm_auto_fl pd ms gr vals fp
+plotIntensityGridByGroup :: [Measurement] -> [(String,[Well])] -> (String,String) -> Maybe FilePath -> IO ()
+plotIntensityGridByGroup ms gr vals fp
     | (length . nub . map mPlate $ ms) > 1 = error "this function works only on single plate measurements"
-    | otherwise = plotIntensityGrid norm_auto_fl pd (concat . zipWith renameByWell gr . repeat $ ms) vals fp
+    | otherwise = plotIntensityGrid (concat . zipWith renameByWell gr . repeat $ ms) vals fp
+	where
+	    renameByWell (name,wells) ms = map (changePlate name) . filter (\x -> mWell x `elem` wells) $ ms
+
+plotIntensityGridByGroup' :: PlateDescription -> [Measurement] -> [(String,[Well])] -> (String,String) -> Maybe FilePath -> IO ()
+plotIntensityGridByGroup' pd ms gr vals fp
+    | (length . nub . map mPlate $ ms) > 1 = error "this function works only on single plate measurements"
+    | otherwise = plotIntensityGrid' pd (concat . zipWith renameByWell gr . repeat $ ms) vals fp
 	where
 	    renameByWell (name,wells) ms = map (changePlate name) . filter (\x -> mWell x `elem` wells) $ ms
 
