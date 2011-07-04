@@ -76,6 +76,9 @@ normalizePlate pd ms = subtractConstantBackground (pd ! JustMedia) ms
 changePlate :: String -> Measurement -> Measurement
 changePlate np ms = ms {mColonyId = ((mColonyId ms) {cPlate = np})}
 
+addDescPlate :: String -> Measurement -> Measurement
+addDescPlate sf ms = ms {mColonyId = ((mColonyId ms) {cPlate = mPlate ms ++ " - " ++ sf})}
+
 mWell :: Measurement -> Well
 mWell = cWell . mColonyId
 
@@ -202,7 +205,7 @@ makePlotData (desc, vals) c = [ (defaultStyle {lineSpec = CustomStyle [LineTitle
 
 plotMesDataByGroup :: [Measurement] -> [(String,[Well])] -> String -> Maybe FilePath -> IO()
 plotMesDataByGroup ms groups m_type mfn = do
-    let by_desc = [ (desc, timeConsecMesByPlateWell m_type . filter ((wells `has`) . mWell) $ ms) | (desc,wells) <- groups ]
+    let by_desc = [ (desc, timeConsecMesByPlateWell m_type . filterByWells wells $ ms) | (desc,wells) <- groups ]
     let plot_data = concat . zipWith makePlotData by_desc $ [1..]
     let fileoptions = fromMaybe [] . fmap fileOpts $ mfn
     plotListsStyle ([Title ("plotting:" ++ m_type)] ++ fileoptions) plot_data
@@ -216,8 +219,8 @@ makePlotODData (low, len) (desc1, od_vals) (desc2, vals) c
 
 plotMesToODByGroup :: [Measurement] -> [(String,[Well])] -> String -> (Int, Int) -> Maybe FilePath -> IO()
 plotMesToODByGroup ms groups m_type (low, len) mfn = do
-    let by_desc = [ (desc, timeConsecMesByPlateWell m_type . filter ((wells `has`) . mWell) $ ms) | (desc,wells) <- groups ]
-    let od_by_desc = [ (desc, timeConsecMesByPlateWell "OD600" . filter ((wells `has`) . mWell) $ ms) | (desc,wells) <- groups ]
+    let by_desc = [ (desc, timeConsecMesByPlateWell m_type . filterByWells wells $ ms) | (desc,wells) <- groups ]
+    let od_by_desc = [ (desc, timeConsecMesByPlateWell "OD600" . filterByWells wells $ ms) | (desc,wells) <- groups ]
     let plot_data = concat . zipWith3 (makePlotODData (low, len)) od_by_desc by_desc $ [1..]
     let fileoptions = fromMaybe [] . fmap fileOpts $ mfn
     plotListsStyle ([Title ("plotting:" ++ m_type ++ " to OD")] ++ fileoptions) plot_data
@@ -313,8 +316,7 @@ filterByWells ws = concat . zipWith filterByWell ws . repeat
 avgVal :: String -> [Well] -> [Measurement] -> Double
 avgVal m_type cWells mes = meanL cmes
     where
-	cmes = map mVal . by_mtype . by_wells cWells $ mes
-	by_wells ws = filter (\x -> mWell x `elem` ws)
+	cmes = map mVal . by_mtype . filterByWells cWells $ mes
 	by_mtype = filterByType m_type
 
 normalizeReads :: String -> [Well] -> Double -> [Measurement] -> [Measurement]
@@ -326,17 +328,18 @@ normalizeReads m_type cWells min_val mes = [ x {mVal = new_val x} | x <- mes]
 
 plotIntensityGridByGroup :: [Measurement] -> [(String,[Well])] -> (String,String) -> Maybe FilePath -> IO ()
 plotIntensityGridByGroup ms gr vals fp
-    | (length . nub . map mPlate $ ms) > 1 = error "this function works only on single plate measurements"
+    | (length . nub . map mPlate $ ms) > 1 = plotIntensityGrid (concat . zipWith addByWell gr . repeat $ ms) vals fp
     | otherwise = plotIntensityGrid (concat . zipWith renameByWell gr . repeat $ ms) vals fp
 	where
-	    renameByWell (name,wells) ms = map (changePlate name) . filter (\x -> mWell x `elem` wells) $ ms
+	    renameByWell (name,wells) ms = map (changePlate name) . filterByWells wells $ ms
+	    addByWell (name,wells) ms = map (addDescPlate name) . filterByWells wells $ ms
 
 plotIntensityGridByGroup' :: PlateDescription -> [Measurement] -> [(String,[Well])] -> (String,String) -> Maybe FilePath -> IO ()
 plotIntensityGridByGroup' pd ms gr vals fp
     | (length . nub . map mPlate $ ms) > 1 = error "this function works only on single plate measurements"
     | otherwise = plotIntensityGrid' pd (concat . zipWith renameByWell gr . repeat $ ms) vals fp
 	where
-	    renameByWell (name,wells) ms = map (changePlate name) . filter (\x -> mWell x `elem` wells) $ ms
+	    renameByWell (name,wells) ms = map (changePlate name) . filterByWells wells $ ms
 
 bestOfBest2 :: [(String,[Well])]
 bestOfBest2 = [
