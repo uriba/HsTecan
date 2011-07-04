@@ -207,13 +207,6 @@ plotMesDataByGroup ms groups m_type mfn = do
     let fileoptions = fromMaybe [] . fmap fileOpts $ mfn
     plotListsStyle ([Title ("plotting:" ++ m_type)] ++ fileoptions) plot_data
 
-plotMesDataFuncByGroup :: [Measurement] -> [(String,[Well])] -> String -> (Double -> Double) -> IO()
-plotMesDataFuncByGroup ms groups m_type f = do
-    let by_desc = [ (desc, map (map f) . timeConsecMesByPlateWell m_type . filter ((wells `containsElem`) . mWell) $ ms) | (desc,wells) <- groups ]
-    let plot_data = concat . zipWith makePlotData by_desc $ [1..]
-    plotListsStyle [Title ("plotting:" ++ m_type)] plot_data
-
-
 makePlotODData ::  (Int, Int) -> (String, [[Double]]) -> (String, [[Double]]) -> Int -> [(PlotStyle, [Double])]
 makePlotODData (low, len) (desc1, od_vals) (desc2, vals) c
     | desc1 == desc2 = [ (defaultStyle {lineSpec = CustomStyle [LineTitle desc1, LineType c]},x) | x <- plot_vals ]
