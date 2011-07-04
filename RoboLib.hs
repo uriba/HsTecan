@@ -204,9 +204,7 @@ plotMesDataByGroup :: [Measurement] -> [(String,[Well])] -> String -> Maybe File
 plotMesDataByGroup ms groups m_type mfn = do
     let by_desc = [ (desc, timeConsecMesByPlateWell m_type . filter ((wells `containsElem`) . mWell) $ ms) | (desc,wells) <- groups ]
     let plot_data = concat . zipWith makePlotData by_desc $ [1..]
-    let fileoptions = if isJust mfn
-			then [ Custom "terminal" ["svg"], Custom "output" ["\"" ++ fromJust mfn ++ "\""]]
-			else []
+    let fileoptions = fromMaybe [] . fmap fileOpts $ mfn
     plotListsStyle ([Title ("plotting:" ++ m_type)] ++ fileoptions) plot_data
 
 plotMesDataFuncByGroup :: [Measurement] -> [(String,[Well])] -> String -> (Double -> Double) -> IO()
@@ -228,9 +226,7 @@ plotMesToODByGroup ms groups m_type (low, len) mfn = do
     let by_desc = [ (desc, timeConsecMesByPlateWell m_type . filter ((wells `containsElem`) . mWell) $ ms) | (desc,wells) <- groups ]
     let od_by_desc = [ (desc, timeConsecMesByPlateWell "OD600" . filter ((wells `containsElem`) . mWell) $ ms) | (desc,wells) <- groups ]
     let plot_data = concat . zipWith3 (makePlotODData (low, len)) od_by_desc by_desc $ [1..]
-    let fileoptions = if isJust mfn
-			then [ Custom "terminal" ["svg"], Custom "output" ["\"" ++ fromJust mfn ++ "\""]]
-			else []
+    let fileoptions = fromMaybe [] . fmap fileOpts $ mfn
     plotListsStyle ([Title ("plotting:" ++ m_type ++ " to OD")] ++ fileoptions) plot_data
 
 mesOfWell :: Well -> [Measurement] -> [Measurement]
@@ -285,6 +281,9 @@ intensityGridPoints' auto_fluorescence (xlabel, ylabel) ms =
     where
 	exp_levels = expLevelPerPlate' auto_fluorescence ms [xlabel,ylabel] (liveWells ms)
 
+fileOpts :: String -> [Attribute]
+fileOpts fn = [ Custom "terminal" ["svg", "size 1000,1000"], Custom "output" ["\"" ++ fn ++ "\""]]
+
 plotIntensityGrid :: [Measurement] -> (String, String) -> Maybe FilePath -> IO ()
 plotIntensityGrid ms (xtype,ytype) mfn = plotPathsStyle plot_attrs plot_lines
     where
@@ -292,10 +291,9 @@ plotIntensityGrid ms (xtype,ytype) mfn = plotPathsStyle plot_attrs plot_lines
 	by_plate = groupBy ((==) `on` mPlate) ms -- . sortBy (compare `on` mPlate) $ ms
 	plates = map (mPlate . head) by_plate
 	plot_lines = zipWith3 makePlotGridData data_sets plates [1..]
-	plot_attrs = [XLabel xtype, YLabel ytype, XRange (0,7), YRange (0,7)] ++ file_options
-	file_options = if isJust mfn
-			then [ Custom "terminal" ["svg", "size 1000,1000"], Custom "output" ["\"" ++ fromJust mfn ++ "\""]]
-			else []
+	plot_attrs = [XLabel xtype, YLabel ytype, XRange (2,6), YRange (2,6)] ++ file_options
+	file_options = fromMaybe [] . fmap fileOpts $ mfn
+
 plotIntensityGrid' :: PlateDescription -> [Measurement] -> (String, String) -> Maybe FilePath -> IO ()
 plotIntensityGrid' pd ms (xtype,ytype) mfn = plotPathsStyle plot_attrs plot_lines
     where
@@ -305,9 +303,7 @@ plotIntensityGrid' pd ms (xtype,ytype) mfn = plotPathsStyle plot_attrs plot_line
 	plates = map (mPlate . head) by_plate
 	plot_lines = zipWith3 makePlotGridData data_sets plates [1..]
 	plot_attrs = [XLabel xtype, YLabel ytype, XRange (0,7), YRange (0,7)] ++ file_options
-	file_options = if isJust mfn
-			then [ Custom "terminal" ["svg", "size 1000,1000"], Custom "output" ["\"" ++ fromJust mfn ++ "\""]]
-			else []
+	file_options = fromMaybe [] . fmap fileOpts $ mfn
 
 filterBy :: (Eq b) => (a -> b) -> b -> [a] -> [a]
 filterBy f v = filter ((==) v . f)
@@ -390,6 +386,42 @@ bObSimple = [
 plateDescP = M.fromList [(NoFluorescence, zipWith Well ['e','f'] . repeat $ 12),(JustMedia,[Well 'g' 12])]
 plateDescLib2 = M.fromList [(NoFluorescence, [Well 'h' 7]),(JustMedia,[Well 'h' 11])]
 
+plateRGBNewSingleDH5a1 =   [
+		("mch-L1-2m", rowWells 'a' ++ rowWells 'b'),
+		("mch-L1-ptac", rowWells 'c' ++ rowWells 'd'),
+		("mch-L2-ptac", rowWells 'e' ++ rowWells 'f'),
+		("yfp-L1-ptac", rowWells 'g' ++ rowWells 'h')
+	    ]
+
+plateRGBNewSingleDH5a2 =    [
+		("yfp-L2-ptac", rowWells 'a' ++ rowWells 'b'),
+		("yfp-L1-m2", rowWells 'c'),
+		("cfp-L1-ptac", rowWells 'd'),
+		("cfp-L2-ptac", rowWells 'e'),
+		("cfp-L1-m2", rowWells 'f'),
+		("control YFP a-z", wPartialRow 'g' (1,6)),
+		("control mCherry a-z", wPartialRow 'g' (7,12)),
+		("control CFP a-z", wPartialRow 'h' (1,6)),
+		("control wt", wPartialRow 'h' (7,9))
+			    ]
+
+plateRGBNewSingleK121 =   [
+		("mch-L1-2m", rowWells 'a' ++ rowWells 'h'),
+		("mch-L1-ptac", rowWells 'b' ++ rowWells 'c'),
+		("mch-L2-ptac", rowWells 'd' ++ rowWells 'e'),
+		("yfp-L1-2m", rowWells 'f' ++ rowWells 'g')
+	    ]
+plateRGBNewSingleK122 =    [
+		("yfp-L1-ptac", rowWells 'a' ++ rowWells 'b'),
+		("yfp-L2-ptac", rowWells 'c'),
+		("cfp-L1-ptac", rowWells 'd'),
+		("cfp-L2-ptac", rowWells 'e'),
+		("cfp-L1-m2", rowWells 'f'),
+		("control YFP a-z", wPartialRow 'g' (1,6)),
+		("control mCherry a-z", wPartialRow 'g' (7,12)),
+		("control CFP a-z", wPartialRow 'h' (1,6)),
+		("control wt", wPartialRow 'h' (7,9))
+			    ]
 --plotMesOptODKDHist :: [Measurement] -> String -> IO ()
 --plotMesOptODKDHist ms m_type = do
 {-
