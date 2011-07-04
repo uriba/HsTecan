@@ -9,8 +9,7 @@ module RoboLib (
     groupByColony,
     plotMesData,
     plotMesDataByGroup,
-    wellColumn,
-    control,
+    wColumn,
     )
 where
 import Graphics.Gnuplot.Simple
@@ -113,10 +112,19 @@ loadPlateDescription filename = do
     file_data <- readFile filename
     return . read $ file_data
 
-wellColumn :: Int -> [Well]
-wellColumn = zipWith Well ['a'..'h'] . repeat
+wPartialColumn :: Int -> (Char,Char) -> [Well]
+wPartialColumn col (a,b) = zipWith Well [a..b] . repeat $ col
 
-allWells96 = concatMap wellColumn [1..12]
+columnWells :: Int -> [Well]
+columnWells col = wPartialColumn col ('a','h')
+
+wPartialRow :: Char -> (Int,Int) -> [Well]
+wPartialRow row (a,b)= zipWith Well (repeat row) [a..b]
+
+rowWells :: Char -> [Well]
+rowWells row = wPartialRow row (1,12)
+
+allWells96 = concatMap columnWells [1..12]
 
 odLiveThreshold = 0.2
 odThreshold = 0.04
@@ -319,17 +327,6 @@ plotIntensityGridByGroup norm_auto_fl pd ms gr vals fp
 	where
 	    renameByWell (name,wells) ms = map (changePlate name) . filter (\x -> mWell x `elem` wells) $ ms
 
-control :: Int -> [(String,[Well])]
-control i = [ (name i ++ [x], zipWith Well (repeat x) . cont_ind $ i) | x <- ['a'..'h']]
-    where
-	name i = ["MCherry-","YFP-","CFP-"] !! ((i - 1))
-	cont_ind i = zipWith (+) [1,2,3,4] . repeat $ (i - 1) * 4 
-
-control2 :: [(String,[Well])]
-control2 = sort $ ("YFP-a", zipWith Well (repeat 'a') [1..6]) : 
-	    [ ("YFP-" ++ [C.chr $ 1 + C.ord x], zipWith Well (repeat x) [1..6]) | x <- ['b'..'e']] ++
-	    [ ("YFP-b", zipWith Well (repeat 'f') [1..6]) ]
-
 bestOfBest2 :: [(String,[Well])]
 bestOfBest2 = [
 		("mA",[Well 'a' 11, Well 'a' 12]),
@@ -360,9 +357,6 @@ bestOfBest2 = [
 
 bObSimple :: [(String,[Well])]
 bObSimple = [
-	--	("mA-D",[Well 'a' 11, Well 'a' 12,Well 'b' 11, Well 'b' 12, Well 'c' 11, Well 'c' 12,Well 'd' 11, Well 'd' 12]),
-	--	("yA-D",[Well 'e' 12,Well 'f' 12,Well 'g' 12,Well 'h' 12]),
-	--	("Stop codon",[Well 'f' 1,Well 'h' 2, Well 'e' 4, Well 'a' 4]),
 		("AD", [Well 'a' 1, Well 'a' 3, Well 'b' 5, Well 'f' 11]),
 		("CA", [Well 'd' 3, Well 'b' 2, Well 'h' 11]),
 		("DA", [Well 'g' 5, Well 'd' 1]),
@@ -370,69 +364,9 @@ bObSimple = [
 		("DD", [Well 'f' 5, Well 'g' 3, Well 'h' 1]),
 		("CD", [Well 'h' 4, Well 'b' 3, Well 'b' 4, Well 'd' 5,Well 'e' 2]),
 		("CC", [Well 'e' 1])]
-	--	("Inert", [Well 'e' 6, Well 'f' 6, Well 'g' 6, Well 'a' 10]),
-	--	("Unmapped", [Well 'a' 2,Well 'a' 5,Well 'a' 6,Well 'b' 1,Well 'b' 6,Well 'c' 1,Well 'c' 2,Well 'c' 3,Well 'c' 4,Well 'c' 5,Well 'd' 2,Well 'd' 6,Well 'e' 3,Well 'e' 5,Well 'f' 2,Well 'f' 3,Well 'g' 1,Well 'g' 2,Well 'g' 4,Well 'h' 3,Well 'h' 5,Well 'h' 6,Well 'e' 11, Well 'g' 11] ++ (concatMap (zipWith Well ['a'..'h'] . repeat) [7..10] \\ [Well 'a' 10]))]
-
-pairsC :: [(String,[Well])]
-pairsC = [
-    ("AC", zipWith Well ['a'..'g'] . repeat $ 1),
-    -- ("A2", zipWith Well ['a'..'g'] . repeat $ 2),
-    ("BC", zipWith Well ['a'..'g'] . repeat $ 3),
-    -- ("B2", zipWith Well ['a'..'g'] . repeat $ 4),
-    ("CC", zipWith Well ['a'..'g'] . repeat $ 5),
-    -- ("C2", zipWith Well ['a'..'g'] . repeat $ 6),
-    ("DC", zipWith Well ['a'..'g'] . repeat $ 7),
-    -- ("D2", zipWith Well ['a'..'g'] . repeat $ 8),
-    ("EC", zipWith Well ['a'..'g'] . repeat $ 9)]
-    -- ("E2", zipWith Well ['a'..'g'] . repeat $ 10),
-    -- ("Z1", zipWith Well ['a'..'g'] . repeat $ 11),
-    --("yA", zipWith Well (repeat 'h') [1,2]),
-    --("yB", zipWith Well (repeat 'h') [3,4]),
-    --("yC", zipWith Well (repeat 'h') [5,6]),
-    --("yD", zipWith Well (repeat 'h') [7,8]),
-    --("yE", zipWith Well (repeat 'h') [9,10]),
-    --("yZ", zipWith Well (repeat 'h') [11,12]),
-    --("mC", zipWith Well ['a','b'] . repeat $ 12),
-    --("mD", zipWith Well ['c','d'] . repeat $ 12),
-    --("inert", zipWith Well ['e','f'] . repeat $ 12)]
-    --("inert", [Well 'g' 12])]
 
 plateDescP = M.fromList [(NoFluorescence, zipWith Well ['e','f'] . repeat $ 12),(JustMedia,[Well 'g' 12])]
 plateDescLib2 = M.fromList [(NoFluorescence, [Well 'h' 7]),(JustMedia,[Well 'h' 11])]
-p172 = [
-	    ("YFP1",zipWith Well (repeat 'a') [1..12]),
-	    ("second row",zipWith Well (repeat 'b') [1..12]),
-	    ("YFP2",zipWith Well (repeat 'c') [1..12]),
-	    ("CFP1",zipWith Well (repeat 'd') [1..12]),
-	    ("CFP2",zipWith Well (repeat 'e') [1..12]),
-	    ("CFP2m",zipWith Well (repeat 'f') [1..12]),
-	    ("YFP controls",zipWith Well (repeat 'g') [1..6]),
-	    ("mCherry controls",zipWith Well (repeat 'g') [6..12]),
-	    ("CFP controls",zipWith Well (repeat 'h') [1..6])
-	]
-
-pairsD :: [(String,[Well])]
-pairsD = [
-    ("AD", zipWith Well ['a'..'g'] . repeat $ 1),
-    -- ("A2", zipWith Well ['a'..'g'] . repeat $ 2),
-    ("BD", zipWith Well ['a'..'g'] . repeat $ 3),
-    -- ("B2", zipWith Well ['a'..'g'] . repeat $ 4),
-    -- ("D1", zipWith Well ['a'..'g'] . repeat $ 5),
-    ("DD", zipWith Well ['a'..'g'] . repeat $ 6),
-    -- ("E1", zipWith Well ['a'..'g'] . repeat $ 7),
-    ("ED", zipWith Well ['a'..'g'] . repeat $ 8),
-    ("ZD", zipWith Well ['a'..'g'] . repeat $ 9)]
-    -- ("Z2", zipWith Well ['a'..'g'] . repeat $ 10),
-    --("yA", zipWith Well (repeat 'h') [1,2]),
-    --("yB", zipWith Well (repeat 'h') [3,4]),
-    --("yC", zipWith Well (repeat 'h') [5,6]),
-    --("yD", zipWith Well (repeat 'h') [7,8]),
-    --("yE", zipWith Well (repeat 'h') [9,10]),
-    --("yZ", zipWith Well (repeat 'h') [11,12]),
-    --("mC", zipWith Well ['a','b'] . repeat $ 12),
-    --("mD", zipWith Well ['c','d'] . repeat $ 12),
-    --("inert", zipWith Well ['e','f'] . repeat $ 12)]
-    --("inert", [Well 'g' 12])]
 
 --plotMesOptODKDHist :: [Measurement] -> String -> IO ()
 --plotMesOptODKDHist ms m_type = do
