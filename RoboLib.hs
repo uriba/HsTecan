@@ -5,9 +5,9 @@ module RoboLib (
     groupByColony,
     plotMesData,
     plotMesDataByGroup,
-    plotIntensityGrid',
-    plotIntensityGridByGroup',
-    expLevelPerPlate',
+    plotIntensityGrid,
+    plotIntensityGridByGroup,
+    expLevelPerPlate,
     expLevel,
     )
 where
@@ -65,13 +65,14 @@ mesTypes = nub . map mType
 meanL :: [Double] -> Double
 meanL = mean . V.fromList
 
-autoFluorescenceMap :: [Well] -> [Measurement] -> MesTypeCorrectionVals
-autoFluorescenceMap cws ms = M.fromList [(x, af x) | x <- mesTypes ms]
+autoFluorescenceMap :: [Measurement] -> [Well] -> MesTypeCorrectionVals
+autoFluorescenceMap ms cws = M.fromList $ [(x, af x) | x <- mesTypes ms]
     where
 	af x = meanL . zipWith3 expLevel cws (repeat ms) . repeat $ x
 
-normalizePlate :: PlateDescription -> [Measurement] -> [Measurement]
-normalizePlate pd ms = subtractConstantBackground (pd ! JustMedia) ms
+normalizePlate :: Maybe PlateDescription -> [Measurement] -> [Measurement]
+normalizePlate Nothing ms = ms
+normalizePlate (Just pd) ms = subtractConstantBackground (pd ! JustMedia) ms
 
 changePlate :: String -> Measurement -> Measurement
 changePlate np ms = ms {mColonyId = ((mColonyId ms) {cPlate = np})}
@@ -83,7 +84,7 @@ mWell :: Measurement -> Well
 mWell = cWell . mColonyId
 
 mPlate :: Measurement -> String
-mPlate = show . cPlate . mColonyId
+mPlate = cPlate . mColonyId
 
 wellFromStr :: String -> Well
 wellFromStr s = Well { wRow = ['a'..'h'] !! fst well_ind , wColumn = snd well_ind + 1 }
@@ -252,49 +253,33 @@ expLevel w ms mt = meanL exp_levels
 	rel_mes = take (high - low) . drop low
 	exp_levels = zipWith (/) (rel_mes . vals $ t_mes) $ (rel_mes ods)
 
-normExpLevel :: MesTypeCorrectionVals -> Well -> [Measurement] -> String -> Double
-normExpLevel auto_fluorescence w ms mt = logBase 10 . max (minValMap ! mt) $ (expLevel w ms mt) - (auto_fluorescence ! mt)
+normExpLevel :: Maybe MesTypeCorrectionVals -> Well -> [Measurement] -> String -> Double
+normExpLevel auto_fluorescence w ms mt = logBase 10 . max (minValMap ! mt) $ (expLevel w ms mt) - auto_fl
+    where
+	auto_fl = fromMaybe 0 $ M.lookup mt =<< auto_fluorescence
 
-expLevelPerPlate :: [Measurement] -> [String] -> [Well] -> [(Well,[(String,Double)])]
-expLevelPerPlate ms mt wells = [ (w,zip mt . map (logBase 10 . expLevel w ms) $ mt) | w <- wells ]
-
-expLevelPerPlate' :: MesTypeCorrectionVals -> [Measurement] -> [String] -> [Well] -> [(Well,[(String,Double)])]
-expLevelPerPlate' auto_fluorescence ms mt wells = 
+expLevelPerPlate :: Maybe MesTypeCorrectionVals -> [Measurement] -> [String] -> [Well] -> [(Well,[(String,Double)])]
+expLevelPerPlate auto_fluorescence ms mt wells = 
 	[ (w,zip mt . map (normExpLevel auto_fluorescence w ms) $ mt) | w <- wells ]
 
 makePlotGridData :: [(Double,Double)] -> String -> Int -> (PlotStyle, [(Double,Double)])
 makePlotGridData data_set plate c =
     (defaultStyle {plotType = Points, lineSpec = CustomStyle [LineTitle plate, PointType c, PointSize 2]},data_set)
 
-intensityGridPoints :: (String, String) -> [Measurement] -> [(Double,Double)]
-intensityGridPoints (xlabel, ylabel) ms = [ (snd . head . snd $ x, snd . last . snd $ x) | x <- exp_levels]
-    where
-	exp_levels = expLevelPerPlate ms [xlabel,ylabel] (liveWells ms)
-
-intensityGridPoints' :: MesTypeCorrectionVals -> (String, String) -> [Measurement] -> [(Double,Double)]
-intensityGridPoints' auto_fluorescence (xlabel, ylabel) ms =
+intensityGridPoints :: Maybe MesTypeCorrectionVals -> (String, String) -> [Measurement] -> [(Double,Double)]
+intensityGridPoints auto_fluorescence (xlabel, ylabel) ms =
     [ (snd . head . snd $ x, snd . last . snd $ x) | x <- exp_levels]
     where
-	exp_levels = expLevelPerPlate' auto_fluorescence ms [xlabel,ylabel] (liveWells ms)
+	exp_levels = expLevelPerPlate auto_fluorescence ms [xlabel,ylabel] (liveWells ms)
 
 fileOpts :: String -> [Attribute]
 fileOpts fn = [ Custom "terminal" ["svg", "size 1000,1000"], Custom "output" ["\"" ++ fn ++ "\""]]
 
-plotIntensityGrid :: [Measurement] -> (String, String) -> Maybe FilePath -> IO ()
-plotIntensityGrid ms (xtype,ytype) mfn = plotPathsStyle plot_attrs plot_lines
+plotIntensityGrid :: Maybe PlateDescription -> [Measurement] -> (String, String) -> Maybe FilePath -> IO ()
+plotIntensityGrid pd ms (xtype,ytype) mfn = plotPathsStyle plot_attrs plot_lines
     where
-	data_sets = map (intensityGridPoints (xtype,ytype)) $ by_plate
-	by_plate = groupBy ((==) `on` mPlate) ms -- . sortBy (compare `on` mPlate) $ ms
-	plates = map (mPlate . head) by_plate
-	plot_lines = zipWith3 makePlotGridData data_sets plates [1..]
-	plot_attrs = [XLabel xtype, YLabel ytype, XRange (2,6), YRange (2,6)] ++ file_options
-	file_options = fromMaybe [] . fmap fileOpts $ mfn
-
-plotIntensityGrid' :: PlateDescription -> [Measurement] -> (String, String) -> Maybe FilePath -> IO ()
-plotIntensityGrid' pd ms (xtype,ytype) mfn = plotPathsStyle plot_attrs plot_lines
-    where
-	data_sets = map (intensityGridPoints' auto_fluorescence (xtype,ytype) . normalizePlate pd) $ by_plate
-	auto_fluorescence = autoFluorescenceMap (pd ! NoFluorescence) ms
+	data_sets = map (intensityGridPoints auto_fluorescence (xtype,ytype) . normalizePlate pd) $ by_plate
+	auto_fluorescence = (return . autoFluorescenceMap ms) =<< M.lookup NoFluorescence =<< pd
 	by_plate = groupBy ((==) `on` mPlate) ms -- . sortBy (compare `on` mPlate) $ ms
 	plates = map (mPlate . head) by_plate
 	plot_lines = zipWith3 makePlotGridData data_sets plates [1..]
@@ -326,18 +311,10 @@ normalizeReads m_type cWells min_val mes = [ x {mVal = new_val x} | x <- mes]
 	corrected_val x = max min_val (mVal x - avg_val)
 	avg_val = avgVal m_type cWells mes
 
-plotIntensityGridByGroup :: [Measurement] -> [(String,[Well])] -> (String,String) -> Maybe FilePath -> IO ()
-plotIntensityGridByGroup ms gr vals fp
-    | (length . nub . map mPlate $ ms) > 1 = plotIntensityGrid (concat . zipWith addByWell gr . repeat $ ms) vals fp
-    | otherwise = plotIntensityGrid (concat . zipWith renameByWell gr . repeat $ ms) vals fp
-	where
-	    renameByWell (name,wells) ms = map (changePlate name) . filterByWells wells $ ms
-	    addByWell (name,wells) ms = map (addDescPlate name) . filterByWells wells $ ms
-
-plotIntensityGridByGroup' :: PlateDescription -> [Measurement] -> [(String,[Well])] -> (String,String) -> Maybe FilePath -> IO ()
-plotIntensityGridByGroup' pd ms gr vals fp
+plotIntensityGridByGroup :: Maybe PlateDescription -> [Measurement] -> [(String,[Well])] -> (String,String) -> Maybe FilePath -> IO ()
+plotIntensityGridByGroup pd ms gr vals fp
     | (length . nub . map mPlate $ ms) > 1 = error "this function works only on single plate measurements"
-    | otherwise = plotIntensityGrid' pd (concat . zipWith renameByWell gr . repeat $ ms) vals fp
+    | otherwise = plotIntensityGrid pd (concat . zipWith renameByWell gr . repeat $ ms) vals fp
 	where
 	    renameByWell (name,wells) ms = map (changePlate name) . filterByWells wells $ ms
 
@@ -392,12 +369,12 @@ plateRGBNewSingleDH5a1 =   [
 plateRGBNewSingleDH5a2 =    [
 		("yfp-L2-ptac", rowWells 'a' ++ rowWells 'b'),
 		("yfp-L1-m2", rowWells 'c'),
-		("cfp-L1-ptac", rowWells 'd'),
-		("cfp-L2-ptac", rowWells 'e'),
-		("cfp-L1-m2", rowWells 'f'),
+--		("cfp-L1-ptac", rowWells 'd'),
+--		("cfp-L2-ptac", rowWells 'e'),
+--		("cfp-L1-m2", rowWells 'f'),
 		("control YFP a-z", wPartialRow 'g' (1,6)),
 		("control mCherry a-z", wPartialRow 'g' (7,12)),
-		("control CFP a-z", wPartialRow 'h' (1,6)),
+--		("control CFP a-z", wPartialRow 'h' (1,6)),
 		("control wt", wPartialRow 'h' (7,9))
 			    ]
 
@@ -410,12 +387,12 @@ plateRGBNewSingleK121 =   [
 plateRGBNewSingleK122 =    [
 		("yfp-L1-ptac", rowWells 'a' ++ rowWells 'b'),
 		("yfp-L2-ptac", rowWells 'c'),
-		("cfp-L1-ptac", rowWells 'd'),
-		("cfp-L2-ptac", rowWells 'e'),
-		("cfp-L1-m2", rowWells 'f'),
+--		("cfp-L1-ptac", rowWells 'd'),
+--		("cfp-L2-ptac", rowWells 'e'),
+--		("cfp-L1-m2", rowWells 'f'),
 		("control YFP a-z", wPartialRow 'g' (1,6)),
 		("control mCherry a-z", wPartialRow 'g' (7,12)),
-		("control CFP a-z", wPartialRow 'h' (1,6)),
+--		("control CFP a-z", wPartialRow 'h' (1,6)),
 		("control wt", wPartialRow 'h' (7,9))
 			    ]
 --plotMesOptODKDHist :: [Measurement] -> String -> IO ()
