@@ -142,24 +142,6 @@ liveWell ms
 liveWells :: [Measurement] -> [Well]
 liveWells ms = [ x | x <- allWells96, liveWell . filterByWell x $ ms] 
 
-findRelevantODTimes :: [Measurement] -> (DateTime, DateTime)
-findRelevantODTimes ms = (min_time, max_time)
-    where
-	min_time = mTime . head . dropWhile (\x -> mVal x >= lower_threshold) $ reversed_sorted_m
-	max_time = mTime . last . takeWhile (\x -> mVal x >= upper_threshold) $ reversed_sorted_m
-	reversed_sorted_m = reverse . sortBy (compare `on` mTime) $ ms
-	vals = map mVal ms
-	min_val = minimum vals
-	max_val = maximum vals
-	lower_threshold = min_val + ((max_val - min_val)/3)
-	upper_threshold = min_val + ((max_val - min_val)/2)
-
-filterRelevantMesByOptOD :: [Measurement] -> [Measurement] -- assumes measurements are for the same plate/Well
-filterRelevantMesByOptOD ms = filter (\x -> inRange times . toSeconds . mTime $ x) ms
-    where
-	times = (toSeconds min_time, toSeconds max_time)
-	(min_time, max_time) = findRelevantODTimes . filterByType "OD600" $ ms
-
 inRange :: (Num a, Ord a) => (a,a) -> a -> Bool
 inRange (minV,maxV) v = v >= minV && v < maxV
 
@@ -230,12 +212,12 @@ minIdx :: (Ord a) => [a] -> Int
 minIdx xs = fromJust . findIndex ((==) . minimum $ xs) $ xs
 
 odLimits :: [Double] -> (Int,Int) -- assumes list of OD measurements sorted time-wise.
-odLimits ms = (low,high)
+odLimits ods = (low,high)
     where
-	rms = reverse ms
-	low = length ms - (fromMaybe (minIdx rms) . findIndex (< odThreshold) $ rms)
-	high = length ms - (fromJust . findIndex (< upper_limit ms) . reverse $ ms)
-	upper_limit x = (minimum x + maximum x / 2)
+	rods = reverse ods
+	low = length ods - (fromMaybe (minIdx rods) . findIndex (< odThreshold) $ rods)
+	high = length ods - (fromJust . findIndex (< upper_limit ods) $ rods)
+	upper_limit x = (minimum x + maximum x) / 2
 
 expLevel :: Well -> [Measurement] -> String -> Double
 expLevel w ms mt = meanL exp_levels
