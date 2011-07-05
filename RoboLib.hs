@@ -226,9 +226,6 @@ plotMesToODByGroup ms groups m_type (low, len) mfn = do
     let fileoptions = fromMaybe [] . fmap fileOpts $ mfn
     plotListsStyle ([Title ("plotting:" ++ m_type ++ " to OD")] ++ fileoptions) plot_data
 
-mesOfWell :: Well -> [Measurement] -> [Measurement]
-mesOfWell w ms = filterByWell w ms
-
 minIdx :: (Ord a) => [a] -> Int
 minIdx xs = fromJust . findIndex ((==) . minimum $ xs) $ xs
 
@@ -297,19 +294,6 @@ filterByType = filterBy mType
 
 filterByWells :: [Well] -> [Measurement] -> [Measurement]
 filterByWells ws = concat . zipWith filterByWell ws . repeat
-
-avgVal :: String -> [Well] -> [Measurement] -> Double
-avgVal m_type cWells mes = meanL cmes
-    where
-	cmes = map mVal . by_mtype . filterByWells cWells $ mes
-	by_mtype = filterByType m_type
-
-normalizeReads :: String -> [Well] -> Double -> [Measurement] -> [Measurement]
-normalizeReads m_type cWells min_val mes = [ x {mVal = new_val x} | x <- mes] 
-    where
-	new_val x = if mType x == m_type then corrected_val x else mVal x
-	corrected_val x = max min_val (mVal x - avg_val)
-	avg_val = avgVal m_type cWells mes
 
 plotIntensityGridByGroup :: Maybe PlateDescription -> [Measurement] -> [(String,[Well])] -> (String,String) -> Maybe FilePath -> IO ()
 plotIntensityGridByGroup pd ms gr vals fp
