@@ -1,13 +1,7 @@
 module RoboLib (
     Well (..),
     Measurement (..),
-    loadPlateExpData,
-    groupByColony,
-    plotMesData,
-    plotMesDataByGroup,
     plotIntensityGrid,
-    plotIntensityGridByGroup,
-    expLevelPerPlate,
     expLevel,
     )
 where
@@ -27,37 +21,48 @@ import qualified Char as C
 import qualified Data.Map as M
 import qualified Data.Vector as V
 
--- reduce minimal value from entire matrix assuming it is inherent background (mostly usable for OD).
-subMinVal :: [[Double]] -> [[Double]]
-subMinVal x = map (map (-min_val +)) x
-    where
-	min_val = minimum . map minimum $ x
-
 -- Some types to make life easier...
-type PlateId = String
+type Label = String
+type MType = String
+type ExpId = String
+type PlateId = Int
 data Well = Well { wRow :: Char , wColumn :: Int } deriving (Eq, Show, Read, Ord)
-data ColonyId = ColonyId { cPlate :: PlateId, cWell :: Well } deriving (Eq, Show, Ord)
+data ColonyId = ColonyId { cExp :: ExpId, cPlate :: Int, cWell :: Well } deriving (Eq, Show, Ord)
 
-data Measurement = Measurement { mColonyId :: ColonyId, mTime :: DateTime , mType :: String, mDesc :: String, mVal :: Double } deriving (Eq, Show)
+data Measurement = Measurement { mExpDesc :: ExpId, mPlate :: PlateId, mTime :: DateTime, mType :: MType, mWell :: Well, mLabel :: Label, mVal :: Double } deriving (Eq, Show)
 
-data WellType = JustMedia | NoFluorescence | Specimen { sID :: String }
-    deriving (Show, Eq, Read, Ord)
-type PlateDescription = M.Map WellType [Well]
-type MesTypeCorrectionVals = Map String Double
+colonyId :: Measurement -> ColonyId
+colonyId (Measurement { mExpDesc = ed, mPlate = mp, mWell = mw }) = ColonyId { cExp = ed, cPlate = mp, cWell = mw }
 
+wildTypeId = "Wild Type" -- label of colonies that have wt bacteria (for auto-fluorescence cancellation)
+mediaId = "Just Media"  -- label of colonies that have no bacteria (for background cancellation)
+
+type ExpData = M.Map Label (M.Map ColonyId [Measurement]) -- experiment data is mapped like this.
+
+type ExpLevelData = M.Map Label (M.Map ColonyId [(MType,[Double])]) -- expression levels for each colony and measurement type.
+
+type PlotLinesData = M.Map Label (M.Map ColonyId [Double]) -- for each label - a list of colonies, for each colony - a line.
+type PlotGridData = M.Map Label (M.Map ColonyId (Double,Double)) -- for each label - a list of colonies, for each colony - a line.
+
+type MesTypeCorrectionVals = Map MType Double
+
+-- When subtracting background noise these are the minimal legal values.
 minValMap :: MesTypeCorrectionVals
 minValMap = M.fromList [("OD600",0), ("YFP", 1), ("MCHERRY",1),("CFP",1)]
 
-constantBackgroundMap :: [Well] -> [Measurement] -> MesTypeCorrectionVals
-constantBackgroundMap cws ms = M.fromList [(x, bg x) | x <- mesTypes ms]
+constantBackgroundMap :: ExpData -> MesTypeCorrectionVals
+constantBackgroundMap ed = M.fromList [(m, bg m) | m <- mes_types]
     where
-	bg m = meanL . map mVal . filterByType m . filterByWells cws $ ms
+	bg m = meanL . map mVal . filterByType m $ bg_mes 
+	mes_types = mesTypes bg_mes
+	bg_mes = concat . M.elems $ (ed ! mediaId)
 
-subtractConstantBackground :: [Well] -> [Measurement] -> [Measurement]
-subtractConstantBackground cws ms = map (\x -> x {mVal = corrected_mval x}) ms
+subtractConstantBackground :: ExpData -> ExpData
+subtractConstantBackground ed = M.map (M.map (map (\x -> x {mVal = corrected_mval x}))) ed
     where
-	background_map = constantBackgroundMap cws ms
-	corrected_mval m = max (minValMap ! mType m) (mVal m - (background_map ! mType m))
+	background_map = constantBackgroundMap ed
+	corrected_mval m =
+	    let mt = mType m in max (minValMap ! mt) (mVal m - (background_map ! mt))
 
 mesTypes :: [Measurement] -> [String]
 mesTypes = nub . map mType
@@ -65,83 +70,163 @@ mesTypes = nub . map mType
 meanL :: [Double] -> Double
 meanL = mean . V.fromList
 
-autoFluorescenceMap :: [Measurement] -> [Well] -> MesTypeCorrectionVals
-autoFluorescenceMap ms cws = M.fromList $ [(x, af x) | x <- mesTypes ms]
-    where
-	af x = meanL . zipWith3 expLevel cws (repeat ms) . repeat $ x
+autoFluorescenceMap :: ExpData -> Maybe MesTypeCorrectionVals
+autoFluorescenceMap ed = do
+    af_colonies <- M.lookup wildTypeId ed
+    let af_mes = M.elems af_colonies
+    let mes_types = mesTypes . concat $ af_mes
+    let af m = meanL . map (expLevel m) $ af_mes
+    return . M.fromList $ [(m, af m) | m <- mes_types]
 
-normalizePlate :: Maybe PlateDescription -> [Measurement] -> [Measurement]
-normalizePlate Nothing ms = ms
-normalizePlate (Just pd) ms = subtractConstantBackground (pd ! JustMedia) ms
+normalizePlate :: ExpData -> ExpData
+normalizePlate ed
+    | Nothing == M.lookup mediaId ed = ed
+    | otherwise = subtractConstantBackground ed
 
-changePlate :: String -> Measurement -> Measurement
-changePlate np ms = ms {mColonyId = ((mColonyId ms) {cPlate = np})}
+changePlate :: Int -> Measurement -> Measurement
+changePlate np ms = ms {mPlate = np}
 
-addDescPlate :: String -> Measurement -> Measurement
-addDescPlate sf ms = ms {mColonyId = ((mColonyId ms) {cPlate = mPlate ms ++ " - " ++ sf})}
-
-mWell :: Measurement -> Well
-mWell = cWell . mColonyId
-
-mPlate :: Measurement -> String
-mPlate = cPlate . mColonyId
-
-wellFromStr :: String -> Well
-wellFromStr s = Well { wRow = ['a'..'h'] !! fst well_ind , wColumn = snd well_ind + 1 }
-    where well_ind = read s :: (Int, Int)
+wellFromInts :: Int -> Int -> Well
+wellFromInts r c = Well { wRow = ['a'..'h'] !! r, wColumn = c + 1 }
 
 maxMes = 70000
 
 readExpLine :: [String] -> Measurement
 readExpLine m = Measurement { 
-		    mColonyId = ColonyId { cPlate = m !! 0, cWell = wellFromStr (m !! 3) },
-		    mTime = fromSeconds . read $ m !! 2,
-		    mType = m !! 1,
-		    mDesc = "",
-		    mVal = if m !! 4 == "nan" then maxMes else read (m !! 4)
+		    mExpDesc = m !! 0,
+		    mPlate = read $ m !! 1,
+		    mType = m !! 2,
+		    mTime = fromSeconds . read $ m !! 3,
+		    mWell = (wellFromInts `on` read) (m !! 4) (m !! 5),
+		    mLabel = m !! 6,
+		    mVal = if m !! 7 == "nan" then maxMes else read (m !! 7)
 		}
 
 -- assume CSV format is each row is:
--- plate_num,measurement_type,timestamp, (column,row), value
-loadPlateExpData :: FilePath -> IO [Measurement]
-loadPlateExpData filename = do
+-- expId, plate, measurement_type, timestamp, column, row, label, value
+loadExpData :: FilePath -> IO ExpData
+loadExpData filename = do
     file_data' <- parseFromFile csvFile filename
     let file_data = head . rights . return $ file_data'
-    return . map readExpLine . tail $ file_data -- first entry is the column description and cannot be parsed
+    let ms = map readExpLine $ file_data
+    return . createExpData $ ms
 
-loadPlateDescription :: FilePath -> IO PlateDescription
-loadPlateDescription filename = do
-    file_data <- readFile filename
-    return . read $ file_data
-
-wPartialColumn :: Int -> (Char,Char) -> [Well]
-wPartialColumn col (a,b) = zipWith Well [a..b] . repeat $ col
-
-columnWells :: Int -> [Well]
-columnWells col = wPartialColumn col ('a','h')
-
-wPartialRow :: Char -> (Int,Int) -> [Well]
-wPartialRow row (a,b)= zipWith Well (repeat row) [a..b]
-
-rowWells :: Char -> [Well]
-rowWells row = wPartialRow row (1,12)
-
-allWells96 = concatMap columnWells [1..12]
+createExpData :: [Measurement] -> ExpData
+createExpData ms = M.fromList [ (label, m_for_label label) | label <- labels ms]
+    where
+	labels = nub . map mLabel
+	colonies l = nub . map colonyId . filterBy mLabel l
+	m_for_colony cid = filterBy colonyId cid ms
+	m_for_label l = M.fromList [ (colony_id, m_for_colony colony_id) | colony_id <- colonies l ms ]
 
 odLiveThreshold = 0.2
 odThreshold = 0.04
 
+verifySingleColony :: [Measurement] -> [Measurement]
+verifySingleColony ms
+    | null ms = error "empty list of measurements given"
+    | 1 < (length . nub . map colonyId $ ms) = error $ "measurements for more than one colony given" ++ show ms
+    | otherwise = ms
+
 liveWell :: [Measurement] -> Bool -- returns whether measurements taken from a given well indicate that it grew.
-liveWell ms
-    | 1 < (length . nub . map mWell $ ms) = error $ "measurments for more than one well given" ++ show ms
-    | null ms = False
-    | otherwise = last sorted_vals > odLiveThreshold
-	where
-	    sorted_vals =  map mVal . sortBy (compare `on` mTime) . filterByType "OD600" $ ms
+liveWell ms = (last . mesByTime "OD600" $ ms) > odLiveThreshold
 
-liveWells :: [Measurement] -> [Well]
-liveWells ms = [ x | x <- allWells96, liveWell . filterByWell x $ ms] 
+mesByTime :: MType -> [Measurement] -> [Double]
+mesByTime mt = map mVal . sortBy (compare `on` mTime) . filterByType mt . verifySingleColony
 
+makePlotData :: (String, [[Double]]) -> Int -> [(PlotStyle, [Double])]
+makePlotData (desc, vals) c = [ (defaultStyle {lineSpec = CustomStyle [LineTitle desc, LineType c]},x) | x <- vals ]
+
+makePlotGridData :: (String,[(Double,Double)]) -> Int -> (PlotStyle, [(Double,Double)])
+makePlotGridData (label,points) c =
+    (defaultStyle {plotType = Points, lineSpec = CustomStyle [LineTitle label, PointType c, PointSize 2]},points)
+
+has :: (Eq a) => [a] -> a -> Bool
+has = flip elem
+
+plotData :: String -> PlotLinesData -> Maybe FilePath -> IO ()
+plotData title pld m_fn = do
+    let by_label = [ (label, M.elems x) | (label,x) <- M.toList pld ]
+    let plot_data = concat . zipWith makePlotData by_label $ [1..]
+    let fileoptions = fromMaybe [] . fmap fileOpts $ m_fn
+    plotListsStyle ([Title title] ++ fileoptions) plot_data
+
+plotMesData :: ExpData -> MType -> Maybe FilePath -> IO()
+plotMesData ed  mt m_fn = do
+    let pld = M.map (M.map (mesByTime mt)) ed
+    plotData mt pld m_fn
+
+mesToOd :: MType -> Maybe (Int,Int) -> [Measurement] -> [Double]
+mesToOd mt Nothing ms = mesToOd mt (Just . mesLimits mt $ ms) $ ms 
+mesToOd mt (Just (low,high)) ms = m_to_od_vals
+    where
+	vals t = take (low - high) . drop low . mesByTime t
+	m_to_od_vals = zipWith (/) (vals mt ms) . vals "OD600" $ ms
+
+plotMesToOD :: ExpData -> MType -> Maybe (Int, Int) -> Maybe FilePath -> IO()
+plotMesToOD ed mt m_range m_fn = do
+    let nbg = normalizePlate ed
+    let pd = M.map (M.map (mesToOd mt m_range)) nbg
+    plotData (mt ++ " to OD") pd m_fn
+
+minIdx :: (Ord a) => [a] -> Int
+minIdx xs = fromJust . findIndex ((==) . minimum $ xs) $ xs
+
+odLimits :: [Double] -> (Int,Int) -- assumes time-wise sorted list of OD measurements.
+odLimits ods = (low,high)
+    where
+	rods = reverse ods
+	low = length ods - (fromMaybe (minIdx rods) . findIndex (< odThreshold) $ rods)
+	high = length ods - (fromJust . findIndex (< upper_limit ods) $ rods)
+	upper_limit x = (minimum x + maximum x) / 2
+
+mesLimits :: MType -> [Measurement] -> (Int,Int)
+mesLimits mt ms = (low,high)
+    where
+	(low,high_od) = odLimits . mesByTime "OD600" $ ms
+	high = min high_od . fromMaybe (high_od) . findIndex (>= maxMes) . mesByTime mt $ ms
+
+expLevel :: MType -> [Measurement] -> Double
+expLevel mt = meanL . mesToOd mt Nothing
+
+expLevels :: ExpData -> ExpLevelData
+expLevels ed = M.map (M.map (\x -> [(m,mesToOd m Nothing x) | m <- mesTypes x])) ed
+
+subtractAutoFluorescence :: ExpData -> ExpLevelData
+subtractAutoFluorescence ed = M.map (M.map (map (\(mt,vals) -> (mt, map (corrected_el mt) vals)))) . expLevels $ ed
+    where
+	corrected_el mt x = fromMaybe x $ do
+	    afm <- autoFluorescenceMap ed
+	    af <- M.lookup mt afm
+	    return $ max (minValMap ! mt) (x - af)
+
+fileOpts :: String -> [Attribute]
+fileOpts fn = [ Custom "terminal" ["svg", "size 1000,1000"], Custom "output" ["\"" ++ fn ++ "\""]]
+
+plotIntensityGrid :: ExpData -> (String, String) -> Maybe FilePath -> IO ()
+plotIntensityGrid ed (xtype,ytype) mfn = plotPathsStyle plot_attrs plot_lines
+    where
+	file_options = fromMaybe [] . fmap fileOpts $ mfn
+	plot_attrs = [XLabel xtype, YLabel ytype, XRange (0,7), YRange (0,7)] ++ file_options
+	data_sets = subtractAutoFluorescence . normalizePlate $ ed
+	plot_vals = M.map (M.map (map (\(mt,vals) -> (mt, meanL vals)))) data_sets
+	grid_points = M.map (M.map (\x -> (fromJust . lookup xtype $ x,fromJust . lookup ytype $ x))) plot_vals
+	labeled_grid_points = [ (label,M.elems pm) | (label,pm) <- M.toList grid_points ]
+	plot_lines = zipWith makePlotGridData labeled_grid_points [1..]
+
+filterBy :: (Eq b) => (a -> b) -> b -> [a] -> [a]
+filterBy f v = filter ((==) v . f)
+
+filterByWell :: Well -> [Measurement] -> [Measurement]
+filterByWell = filterBy mWell
+
+filterByType :: String -> [Measurement] -> [Measurement]
+filterByType = filterBy mType
+
+filterByWells :: [Well] -> [Measurement] -> [Measurement]
+filterByWells ws = concat . zipWith filterByWell ws . repeat
+
+--------------------------- Histograms
 inRange :: (Num a, Ord a) => (a,a) -> a -> Bool
 inRange (minV,maxV) v = v >= minV && v < maxV
 
@@ -165,199 +250,3 @@ kdHist points_num dots = zip points_list values_list
 	(points,values) = KD.gaussianPDF points_num . DVU.fromList $ dots -- default KD
 	points_list = DVU.toList . KD.fromPoints $ points
 	values_list = DVU.toList values
-
-groupByColony :: [Measurement] -> [[Measurement]]
-groupByColony = groupBy ((==) `on` mColonyId) . sortBy (compare `on` mColonyId)
-
-sortMesByTime :: String -> [Measurement] -> [Measurement]
-sortMesByTime m_type = sortBy (compare `on` mTime) . filterByType m_type
-
-timeConsecMesByPlateWell :: String -> [Measurement] -> [[Double]]
-timeConsecMesByPlateWell m_type  ms = map (map mVal . sortMesByTime m_type) . groupByColony $ ms
-
-plotMesData :: [Measurement] -> String -> IO ()
-plotMesData ms m_type = do
-    let m_vals = timeConsecMesByPlateWell m_type ms
-    plotLists [Title ("plotting:" ++ m_type)] m_vals
-
-has :: (Eq a) => [a] -> a -> Bool
-has = flip elem
-
-makePlotData :: (String, [[Double]]) -> Int -> [(PlotStyle, [Double])]
-makePlotData (desc, vals) c = [ (defaultStyle {lineSpec = CustomStyle [LineTitle desc, LineType c]},x) | x <- vals ]
-
-plotMesDataByGroup :: [Measurement] -> [(String,[Well])] -> String -> Maybe FilePath -> IO()
-plotMesDataByGroup ms groups m_type mfn = do
-    let by_desc = [ (desc, timeConsecMesByPlateWell m_type . filterByWells wells $ ms) | (desc,wells) <- groups ]
-    let plot_data = concat . zipWith makePlotData by_desc $ [1..]
-    let fileoptions = fromMaybe [] . fmap fileOpts $ mfn
-    plotListsStyle ([Title ("plotting:" ++ m_type)] ++ fileoptions) plot_data
-
-makePlotODData ::  (Int, Int) -> (String, [[Double]]) -> (String, [[Double]]) -> Int -> [(PlotStyle, [Double])]
-makePlotODData (low, len) (desc1, od_vals) (desc2, vals) c
-    | desc1 == desc2 = [ (defaultStyle {lineSpec = CustomStyle [LineTitle desc1, LineType c]},x) | x <- plot_vals ]
-    | otherwise = error $ "differing descriptions:" ++ desc1 ++ " and " ++ desc2
-    where
-	plot_vals  = map ( take len . drop low ) $ map (map (logBase 10)) $ zipWith (zipWith (/)) vals (subMinVal od_vals)
-
-plotMesToODByGroup :: [Measurement] -> [(String,[Well])] -> String -> (Int, Int) -> Maybe FilePath -> IO()
-plotMesToODByGroup ms groups m_type (low, len) mfn = do
-    let by_desc = [ (desc, timeConsecMesByPlateWell m_type . filterByWells wells $ ms) | (desc,wells) <- groups ]
-    let od_by_desc = [ (desc, timeConsecMesByPlateWell "OD600" . filterByWells wells $ ms) | (desc,wells) <- groups ]
-    let plot_data = concat . zipWith3 (makePlotODData (low, len)) od_by_desc by_desc $ [1..]
-    let fileoptions = fromMaybe [] . fmap fileOpts $ mfn
-    plotListsStyle ([Title ("plotting:" ++ m_type ++ " to OD")] ++ fileoptions) plot_data
-
-minIdx :: (Ord a) => [a] -> Int
-minIdx xs = fromJust . findIndex ((==) . minimum $ xs) $ xs
-
-odLimits :: [Double] -> (Int,Int) -- assumes list of OD measurements sorted time-wise.
-odLimits ods = (low,high)
-    where
-	rods = reverse ods
-	low = length ods - (fromMaybe (minIdx rods) . findIndex (< odThreshold) $ rods)
-	high = length ods - (fromJust . findIndex (< upper_limit ods) $ rods)
-	upper_limit x = (minimum x + maximum x) / 2
-
-expLevel :: Well -> [Measurement] -> String -> Double
-expLevel w ms mt = meanL exp_levels
-    where
-	wms = filterByWell w ms
-	od_mes = filterByType "OD600" wms
-	t_mes =  filterByType mt wms
-	vals = map mVal . sortBy (compare `on` mTime)
-	ods = vals od_mes
-	(low,high_od) = odLimits ods
-	high = min high_od . fromMaybe (length t_mes) . findIndex (>= maxMes) . vals $ t_mes
-	rel_mes = take (high - low) . drop low
-	exp_levels = zipWith (/) (rel_mes . vals $ t_mes) $ (rel_mes ods)
-
-normExpLevel :: Maybe MesTypeCorrectionVals -> Well -> [Measurement] -> String -> Double
-normExpLevel auto_fluorescence w ms mt = logBase 10 . max (minValMap ! mt) $ (expLevel w ms mt) - auto_fl
-    where
-	auto_fl = fromMaybe 0 $ M.lookup mt =<< auto_fluorescence
-
-expLevelPerPlate :: Maybe MesTypeCorrectionVals -> [Measurement] -> [String] -> [Well] -> [(Well,[(String,Double)])]
-expLevelPerPlate auto_fluorescence ms mt wells = 
-	[ (w,zip mt . map (normExpLevel auto_fluorescence w ms) $ mt) | w <- wells ]
-
-makePlotGridData :: [(Double,Double)] -> String -> Int -> (PlotStyle, [(Double,Double)])
-makePlotGridData data_set plate c =
-    (defaultStyle {plotType = Points, lineSpec = CustomStyle [LineTitle plate, PointType c, PointSize 2]},data_set)
-
-intensityGridPoints :: Maybe MesTypeCorrectionVals -> (String, String) -> [Measurement] -> [(Double,Double)]
-intensityGridPoints auto_fluorescence (xlabel, ylabel) ms =
-    [ (snd . head . snd $ x, snd . last . snd $ x) | x <- exp_levels]
-    where
-	exp_levels = expLevelPerPlate auto_fluorescence ms [xlabel,ylabel] (liveWells ms)
-
-fileOpts :: String -> [Attribute]
-fileOpts fn = [ Custom "terminal" ["svg", "size 1000,1000"], Custom "output" ["\"" ++ fn ++ "\""]]
-
-plotIntensityGrid :: Maybe PlateDescription -> [Measurement] -> (String, String) -> Maybe FilePath -> IO ()
-plotIntensityGrid pd ms (xtype,ytype) mfn = plotPathsStyle plot_attrs plot_lines
-    where
-	data_sets = map (intensityGridPoints auto_fluorescence (xtype,ytype) . normalizePlate pd) $ by_plate
-	auto_fluorescence = (return . autoFluorescenceMap ms) =<< M.lookup NoFluorescence =<< pd
-	by_plate = groupBy ((==) `on` mPlate) ms -- . sortBy (compare `on` mPlate) $ ms
-	plates = map (mPlate . head) by_plate
-	plot_lines = zipWith3 makePlotGridData data_sets plates [1..]
-	plot_attrs = [XLabel xtype, YLabel ytype, XRange (0,7), YRange (0,7)] ++ file_options
-	file_options = fromMaybe [] . fmap fileOpts $ mfn
-
-filterBy :: (Eq b) => (a -> b) -> b -> [a] -> [a]
-filterBy f v = filter ((==) v . f)
-
-filterByWell :: Well -> [Measurement] -> [Measurement]
-filterByWell = filterBy mWell
-
-filterByType :: String -> [Measurement] -> [Measurement]
-filterByType = filterBy mType
-
-filterByWells :: [Well] -> [Measurement] -> [Measurement]
-filterByWells ws = concat . zipWith filterByWell ws . repeat
-
-plotIntensityGridByGroup :: Maybe PlateDescription -> [Measurement] -> [(String,[Well])] -> (String,String) -> Maybe FilePath -> IO ()
-plotIntensityGridByGroup pd ms gr vals fp
-    | (length . nub . map mPlate $ ms) > 1 = error "this function works only on single plate measurements"
-    | otherwise = plotIntensityGrid pd (concat . zipWith renameByWell gr . repeat $ ms) vals fp
-	where
-	    renameByWell (name,wells) ms = map (changePlate name) . filterByWells wells $ ms
-
-bestOfBest2 :: [(String,[Well])]
-bestOfBest2 = [
-		("mA",[Well 'a' 11, Well 'a' 12]),
-		("mB",[Well 'b' 11, Well 'b' 12]),
-		("mC",[Well 'c' 11, Well 'c' 12]),
-		("mD",[Well 'd' 11, Well 'd' 12]),
-		("yA",[Well 'e' 12]),
-		("yB",[Well 'f' 12]),
-		("yC",[Well 'g' 12]),
-		("yD",[Well 'h' 12]),
-		("anchor-D4(A?)",[Well 'e' 11]),
-		("anchor-G1(AD)",[Well 'f' 11]),
-		("anchor-A11(??)",[Well 'g' 11]),
-		("anchor-G11(CA)",[Well 'h' 11]),
-		("Low - stop codon (C7,C8,E7,H11)",[Well 'f' 1,Well 'h' 2, Well 'e' 4, Well 'a' 4]),
-		("AD", [Well 'a' 1, Well 'a' 3, Well 'b' 5]),
-		("CA", [Well 'd' 3, Well 'b' 2]),
-		("DA", [Well 'g' 5, Well 'd' 1]),
-		("DC", [Well 'f' 4, Well 'c' 6, Well 'd' 4]),
-		("DD", [Well 'f' 5, Well 'g' 3]),
-		("CD", [Well 'h' 4, Well 'b' 3, Well 'b' 4, Well 'd' 5,Well 'e' 2]),
-		("DDframeshift", [Well 'h' 1]),
-		("CstopC", [Well 'e' 1]),
-		("CFP-A", [Well 'a' 10]),
-		("Inert", [Well 'e' 6, Well 'f' 6, Well 'g' 6]),
-		("New Colonies", concatMap (zipWith Well ['a'..'h'] . repeat) [7..10] \\ [Well 'a' 10]),
-		("Unmapped", [Well 'a' 2,Well 'a' 5,Well 'a' 6,Well 'b' 1,Well 'b' 6,Well 'c' 1,Well 'c' 2,Well 'c' 3,Well 'c' 4,Well 'c' 5,Well 'd' 2,Well 'd' 6,Well 'e' 3,Well 'e' 5,Well 'f' 2,Well 'f' 3,Well 'g' 1,Well 'g' 2,Well 'g' 4,Well 'h' 3,Well 'h' 5,Well 'h' 6])]
-
-bObSimple :: [(String,[Well])]
-bObSimple = [
-		("AD", [Well 'a' 1, Well 'a' 3, Well 'b' 5, Well 'f' 11]),
-		("CA", [Well 'd' 3, Well 'b' 2, Well 'h' 11]),
-		("DA", [Well 'g' 5, Well 'd' 1]),
-		("DC", [Well 'f' 4, Well 'c' 6, Well 'd' 4]),
-		("DD", [Well 'f' 5, Well 'g' 3, Well 'h' 1]),
-		("CD", [Well 'h' 4, Well 'b' 3, Well 'b' 4, Well 'd' 5,Well 'e' 2]),
-		("CC", [Well 'e' 1])]
-
-plateDescP = M.fromList [(NoFluorescence, zipWith Well ['e','f'] . repeat $ 12),(JustMedia,[Well 'g' 12])]
-plateDescLib2 = M.fromList [(NoFluorescence, [Well 'h' 7]),(JustMedia,[Well 'h' 11])]
-
-plateRGBNewSingleDH5a1 =   [
-		("mch-L1-2m", rowWells 'a' ++ rowWells 'b'),
-		("mch-L1-ptac", rowWells 'c' ++ rowWells 'd'),
-		("mch-L2-ptac", rowWells 'e' ++ rowWells 'f'),
-		("yfp-L1-ptac", rowWells 'g' ++ rowWells 'h')
-	    ]
-
-plateRGBNewSingleDH5a2 =    [
-		("yfp-L2-ptac", rowWells 'a' ++ rowWells 'b'),
-		("yfp-L1-m2", rowWells 'c'),
---		("cfp-L1-ptac", rowWells 'd'),
---		("cfp-L2-ptac", rowWells 'e'),
---		("cfp-L1-m2", rowWells 'f'),
-		("control YFP a-z", wPartialRow 'g' (1,6)),
-		("control mCherry a-z", wPartialRow 'g' (7,12)),
---		("control CFP a-z", wPartialRow 'h' (1,6)),
-		("control wt", wPartialRow 'h' (7,9))
-			    ]
-
-plateRGBNewSingleK121 =   [
-		("mch-L1-2m", rowWells 'a' ++ rowWells 'h'),
-		("mch-L1-ptac", rowWells 'b' ++ rowWells 'c'),
-		("mch-L2-ptac", rowWells 'd' ++ rowWells 'e'),
-		("yfp-L1-2m", rowWells 'f' ++ rowWells 'g')
-	    ]
-plateRGBNewSingleK122 =    [
-		("yfp-L1-ptac", rowWells 'a' ++ rowWells 'b'),
-		("yfp-L2-ptac", rowWells 'c'),
---		("cfp-L1-ptac", rowWells 'd'),
---		("cfp-L2-ptac", rowWells 'e'),
---		("cfp-L1-m2", rowWells 'f'),
-		("control YFP a-z", wPartialRow 'g' (1,6)),
-		("control mCherry a-z", wPartialRow 'g' (7,12)),
---		("control CFP a-z", wPartialRow 'h' (1,6)),
-		("control wt", wPartialRow 'h' (7,9))
-			    ]
