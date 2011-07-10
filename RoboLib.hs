@@ -49,6 +49,39 @@ type ExpLevelData = M.Map Label (M.Map ColonyId [(MType,[Double])]) -- expressio
 type PlotLinesData = M.Map Label (M.Map ColonyId [Double]) -- for each label - a list of colonies, for each colony - a line.
 type PlotGridData = M.Map Label (M.Map ColonyId (Double,Double)) -- for each label - a list of colonies, for each colony - a line.
 
+-- utils for outputting plot data to files
+linesData :: (String,M.Map ColonyId [Double]) -> [[String]]
+linesData (label,lines) = map (lineData label) . M.toList $ lines
+
+lineData :: String -> (ColonyId,[Double]) -> [String]
+lineData label (cid,points) = [
+	label,
+	cExp cid,
+	show . cPlate $ cid,
+	[wRow . cWell $ cid],
+	show . wColumn . cWell $ cid
+    ] ++ map show points
+
+plotLinesDataToStrings :: PlotLinesData -> [[String]]
+plotLinesDataToStrings = concatMap linesData . M.toList
+
+pointsData :: (String,M.Map ColonyId (Double,Double)) -> [[String]]
+pointsData (label,points) = map (pointData label) . M.toList $ points
+
+pointData :: String -> (ColonyId,(Double,Double)) -> [String]
+pointData label (cid,(x,y)) = [
+	label,
+	cExp cid,
+	show . cPlate $ cid,
+	[wRow . cWell $ cid],
+	show . wColumn . cWell $ cid,
+	show x,
+	show y
+    ]
+
+plotGridDataToStrings :: PlotGridData -> [[String]]
+plotGridDataToStrings = concatMap pointsData . M.toList
+	    
 type MesTypeCorrectionVals = Map MType Double
 
 -- When subtracting background noise these are the minimal legal values.
