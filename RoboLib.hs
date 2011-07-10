@@ -102,7 +102,7 @@ readExpLine m = Measurement {
 		    mVal = if m !! 7 == "nan" then maxMes else read (m !! 7)
 		}
 
--- assume CSV format is each row is:
+-- assume CSV format of each row is:
 -- expId, plate, measurement_type, timestamp, column, row, label, value
 loadExpData :: FilePath -> IO ExpData
 loadExpData filename = do
@@ -160,13 +160,16 @@ mesToOd :: MType -> Maybe (Int,Int) -> [Measurement] -> [Double]
 mesToOd mt Nothing ms = mesToOd mt (Just . mesLimits mt $ ms) $ ms 
 mesToOd mt (Just (low,high)) ms = m_to_od_vals
     where
-	vals t = take (low - high) . drop low . mesByTime t
+	vals t = take (high - low) . drop low . mesByTime t
 	m_to_od_vals = zipWith (/) (vals mt ms) . vals "OD600" $ ms
+
+removeDeadWells :: ExpData -> ExpData
+removeDeadWells = M.filter (not . M.null) . M.map (M.filter liveWell)
 
 plotMesToOD :: ExpData -> MType -> Maybe (Int, Int) -> Maybe FilePath -> IO()
 plotMesToOD ed mt m_range m_fn = do
-    let nbg = normalizePlate ed
-    let pd = M.map (M.map (mesToOd mt m_range)) nbg
+    let nbg = removeDeadWells . normalizePlate $ ed
+    let pd = M.map (M.map (map (logBase 10) . mesToOd mt m_range)) nbg
     plotData (mt ++ " to OD") pd m_fn
 
 minIdx :: (Ord a) => [a] -> Int
@@ -203,14 +206,18 @@ subtractAutoFluorescence ed = M.map (M.map (map (\(mt,vals) -> (mt, map (correct
 fileOpts :: String -> [Attribute]
 fileOpts fn = [ Custom "terminal" ["svg", "size 1000,1000"], Custom "output" ["\"" ++ fn ++ "\""]]
 
-plotIntensityGrid :: ExpData -> (String, String) -> Maybe FilePath -> IO ()
-plotIntensityGrid ed (xtype,ytype) mfn = plotPathsStyle plot_attrs plot_lines
+type AxesTrans = ((Double -> Double),(Double -> Double))
+
+noTrans = (id,id)
+
+plotIntensityGrid :: ExpData -> (String, String) -> AxesTrans -> Maybe FilePath -> IO ()
+plotIntensityGrid ed (xtype,ytype) (fx,fy) mfn = plotPathsStyle plot_attrs plot_lines
     where
 	file_options = fromMaybe [] . fmap fileOpts $ mfn
 	plot_attrs = [XLabel xtype, YLabel ytype, XRange (0,7), YRange (0,7)] ++ file_options
-	data_sets = subtractAutoFluorescence . normalizePlate $ ed
+	data_sets = subtractAutoFluorescence . removeDeadWells . normalizePlate $ ed
 	plot_vals = M.map (M.map (map (\(mt,vals) -> (mt, meanL vals)))) data_sets
-	grid_points = M.map (M.map (\x -> (fromJust . lookup xtype $ x,fromJust . lookup ytype $ x))) plot_vals
+	grid_points = M.map (M.map (\x -> (fx . fromJust . lookup xtype $ x,fy . fromJust . lookup ytype $ x))) plot_vals
 	labeled_grid_points = [ (label,M.elems pm) | (label,pm) <- M.toList grid_points ]
 	plot_lines = zipWith makePlotGridData labeled_grid_points [1..]
 
