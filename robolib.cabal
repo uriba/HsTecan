@@ -11,3 +11,9 @@ Library
                       MissingH >= 1.1 && < 1.2, statistics >= 0.8 && < 0.9, datetime >= 0.2 && < 0.3,
                       haskell98 >= 1.0 && < 1.2, vector >= 0.7 && < 0.8, containers >= 0.3 && <0.4
     Exposed-modules:  RoboLib
+
+Executable  PlotExpData
+    Main-is:	      PlotExpData.hs
+    Build-Depends:    base >= 3 && < 5, gnuplot >=0.4.2 && < 4.3, parsec >= 3.1 && < 3.2,
+                      MissingH >= 1.1 && < 1.2, statistics >= 0.8 && < 0.9, datetime >= 0.2 && < 0.3,
+                      haskell98 >= 1.0 && < 1.2, vector >= 0.7 && < 0.8, containers >= 0.3 && <0.4

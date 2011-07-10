@@ -2,6 +2,10 @@ module RoboLib (
     Well (..),
     Measurement (..),
     plotIntensityGrid,
+    plotMesToOD,
+    plotMesData,
+    loadExpData,
+    ExpData,
     expLevel,
     )
 where
@@ -166,6 +170,7 @@ mesToOd mt (Just (low,high)) ms = m_to_od_vals
 removeDeadWells :: ExpData -> ExpData
 removeDeadWells = M.filter (not . M.null) . M.map (M.filter liveWell)
 
+-- consider combining code with plotGridData (currently problem is requirement for specifying limits here)
 plotMesToOD :: ExpData -> MType -> Maybe (Int, Int) -> Maybe FilePath -> IO()
 plotMesToOD ed mt m_range m_fn = do
     let nbg = removeDeadWells . normalizePlate $ ed
