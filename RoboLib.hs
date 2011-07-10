@@ -7,6 +7,7 @@ module RoboLib (
     loadExpData,
     ExpData,
     expLevel,
+    noTrans,
     )
 where
 import Graphics.Gnuplot.Simple

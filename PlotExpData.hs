@@ -26,6 +26,11 @@ plotMesApp ed mfn t = plotMesData ed t ofn
     where
 	ofn = fmap (\x -> x ++ t ++ ".svg") mfn
 
+plotMesToODApp :: ExpData -> Maybe FilePath -> String -> IO ()
+plotMesToODApp ed mfn t = plotMesToOD ed t Nothing ofn
+    where
+	ofn = fmap (\x -> x ++ t ++ "toOD.svg") mfn
+
 main :: IO ()
 main = do
     args <- getArgs
@@ -35,4 +40,7 @@ main = do
     ms <- loadExpData input_file
     putStrLn $ "processing:" ++ input_file
     mapM_ (plotMesApp ms (optOutput opt)) ["OD600","MCHERRY","YFP","CFP"]
+    mapM_ (plotMesToODApp ms (optOutput opt)) ["MCHERRY","YFP","CFP"]
+    let grid_output = fmap (\x -> x ++ "grid.svg") . optOutput $ opt
+    plotIntensityGrid ms (optAxes opt) (logBase 10, logBase 10) grid_output
     return ()
