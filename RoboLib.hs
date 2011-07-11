@@ -4,6 +4,15 @@ module RoboLib (
     plotIntensityGrid,
     plotMesToOD,
     plotMesData,
+    plotData,
+    plotGrid,
+    mesData,
+    mesToOdData,
+    intensityGridData,
+    plotGridDataToStrings,
+    plotLinesDataToStrings,
+    PlotLinesData,
+    PlotGridData,
     loadExpData,
     ExpData,
     expLevel,
@@ -189,10 +198,11 @@ plotData title pld m_fn = do
     let fileoptions = fromMaybe [] . fmap fileOpts $ m_fn
     plotListsStyle ([Title title] ++ fileoptions) plot_data
 
+mesData :: ExpData -> MType -> PlotLinesData
+mesData ed mt = M.map (M.map (mesByTime mt)) ed
+
 plotMesData :: ExpData -> MType -> Maybe FilePath -> IO()
-plotMesData ed  mt m_fn = do
-    let pld = M.map (M.map (mesByTime mt)) ed
-    plotData mt pld m_fn
+plotMesData ed  mt m_fn = plotData mt (mesData ed mt) m_fn
 
 mesToOd :: MType -> Maybe (Int,Int) -> [Measurement] -> [Double]
 mesToOd mt Nothing ms = mesToOd mt (Just . mesLimits mt $ ms) $ ms 
@@ -205,11 +215,13 @@ removeDeadWells :: ExpData -> ExpData
 removeDeadWells = M.filter (not . M.null) . M.map (M.filter liveWell)
 
 -- consider combining code with plotGridData (currently problem is requirement for specifying limits here)
+mesToOdData :: ExpData -> MType -> Maybe (Int, Int) -> PlotLinesData
+mesToOdData ed mt m_range = M.map (M.map (map (logBase 10) . mesToOd mt m_range)) nbg
+    where
+	nbg = removeDeadWells . normalizePlate $ ed
+	
 plotMesToOD :: ExpData -> MType -> Maybe (Int, Int) -> Maybe FilePath -> IO()
-plotMesToOD ed mt m_range m_fn = do
-    let nbg = removeDeadWells . normalizePlate $ ed
-    let pd = M.map (M.map (map (logBase 10) . mesToOd mt m_range)) nbg
-    plotData (mt ++ " to OD") pd m_fn
+plotMesToOD ed mt m_range m_fn = plotData (mt ++ " to OD") (mesToOdData ed mt m_range) m_fn
 
 minIdx :: (Ord a) => [a] -> Int
 minIdx xs = fromJust . findIndex ((==) . minimum $ xs) $ xs
@@ -249,16 +261,25 @@ type AxesTrans = ((Double -> Double),(Double -> Double))
 
 noTrans = (id,id)
 
-plotIntensityGrid :: ExpData -> (String, String) -> AxesTrans -> Maybe FilePath -> IO ()
-plotIntensityGrid ed (xtype,ytype) (fx,fy) mfn = plotPathsStyle plot_attrs plot_lines
+intensityGridData :: ExpData -> (String,String) -> AxesTrans -> PlotGridData
+intensityGridData ed (xtype,ytype) (fx,fy) = grid_points
     where
-	file_options = fromMaybe [] . fmap fileOpts $ mfn
-	plot_attrs = [XLabel xtype, YLabel ytype, XRange (0,7), YRange (0,7)] ++ file_options
 	data_sets = subtractAutoFluorescence . removeDeadWells . normalizePlate $ ed
 	plot_vals = M.map (M.map (map (\(mt,vals) -> (mt, meanL vals)))) data_sets
 	grid_points = M.map (M.map (\x -> (fx . fromJust . lookup xtype $ x,fy . fromJust . lookup ytype $ x))) plot_vals
-	labeled_grid_points = [ (label,M.elems pm) | (label,pm) <- M.toList grid_points ]
+
+plotGrid :: String -> PlotGridData -> (String,String) -> Maybe FilePath -> IO ()
+plotGrid title pgd (xtype,ytype) m_fn = plotPathsStyle plot_attrs plot_lines
+    where
+	file_options = fromMaybe [] . fmap fileOpts $ m_fn
+	plot_attrs = [XLabel xtype, YLabel ytype, XRange (0,7), YRange (0,7)] ++ file_options
+	labeled_grid_points = [ (label,M.elems pm) | (label,pm) <- M.toList pgd ]
 	plot_lines = zipWith makePlotGridData labeled_grid_points [1..]
+
+plotIntensityGrid :: ExpData -> (String, String) -> AxesTrans -> Maybe FilePath -> IO ()
+plotIntensityGrid ed axes fs m_fn = plotGrid "Log scale grid plot" pgd axes m_fn
+    where
+	pgd = intensityGridData ed axes fs
 
 filterBy :: (Eq b) => (a -> b) -> b -> [a] -> [a]
 filterBy f v = filter ((==) v . f)
