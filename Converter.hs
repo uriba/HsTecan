@@ -69,8 +69,82 @@ showNewMes nm = [
 		    show . mVal . mOldMes $ nm
 		]
 
-convertMes :: Description -> OldMeasurement -> NewMeasurment
-convertMes d om = NewMeasurment { mExpId = "Converted", mLabel = d ! (0,mWell om), mOldMes = om }
+oldToNew :: (String,[Well]) -> [((PlateId, Well),String)]
+oldToNew (label,wells) = zip (zip (repeat 0) wells) . repeat $ label
+
+bestOfBest2Desc :: Description
+bestOfBest2Desc = M.fromList  . concatMap oldToNew $ [
+		("mA",[Well 'a' 11, Well 'a' 12]),
+		("mB",[Well 'b' 11, Well 'b' 12]),
+		("mC",[Well 'c' 11, Well 'c' 12]),
+		("mD",[Well 'd' 11, Well 'd' 12]),
+		("yA",[Well 'e' 12]),
+		("yB",[Well 'f' 12]),
+		("yC",[Well 'g' 12]),
+		("yD",[Well 'h' 12]),
+		("A?",[Well 'e' 11]),
+		("AD", [Well 'a' 1, Well 'a' 3, Well 'b' 5, Well 'f' 11]),
+		("CA", [Well 'd' 3, Well 'b' 2, Well 'h' 11]),
+		("DA", [Well 'g' 5, Well 'd' 1]),
+		("DC", [Well 'f' 4, Well 'c' 6, Well 'd' 4]),
+		("DD", [Well 'f' 5, Well 'g' 3, Well 'h' 1]),
+		("CD", [Well 'h' 4, Well 'b' 3, Well 'b' 4, Well 'd' 5,Well 'e' 2]),
+		("CC", [Well 'e' 1]),
+		("CFP-A", [Well 'a' 10]),
+		("Wild Type", [Well 'e' 6, Well 'f' 6, Well 'g' 6]),
+		("Unmapped", (concatMap (zipWith Well ['a'..'h'] . repeat) [7..10] \\ [Well 'a' 10]) ++ [Well 'g' 11, Well 'a' 2,Well 'a' 5,Well 'a' 6,Well 'b' 1,Well 'b' 6,Well 'c' 1,Well 'c' 2,Well 'c' 3,Well 'c' 4,Well 'c' 5,Well 'd' 2,Well 'd' 6,Well 'e' 3,Well 'e' 5,Well 'f' 2,Well 'f' 3,Well 'g' 1,Well 'g' 2,Well 'g' 4,Well 'h' 3,Well 'h' 5,Well 'h' 6])]
+
+pairsC :: Description
+pairsC = M.fromList . concatMap oldToNew $ [
+    ("AC", zipWith Well ['a'..'g'] . repeat $ 1),
+    -- ("A2", zipWith Well ['a'..'g'] . repeat $ 2),
+    ("BC", zipWith Well ['a'..'g'] . repeat $ 3),
+    -- ("B2", zipWith Well ['a'..'g'] . repeat $ 4),
+    ("CC", zipWith Well ['a'..'g'] . repeat $ 5),
+    -- ("C2", zipWith Well ['a'..'g'] . repeat $ 6),
+    ("DC", zipWith Well ['a'..'g'] . repeat $ 7),
+    -- ("D2", zipWith Well ['a'..'g'] . repeat $ 8),
+    ("EC", zipWith Well ['a'..'g'] . repeat $ 9),
+    -- ("E2", zipWith Well ['a'..'g'] . repeat $ 10),
+    -- ("Z1", zipWith Well ['a'..'g'] . repeat $ 11),
+    ("yA", zipWith Well (repeat 'h') [1,2]),
+    ("yB", zipWith Well (repeat 'h') [3,4]),
+    ("yC", zipWith Well (repeat 'h') [5,6]),
+    ("yD", zipWith Well (repeat 'h') [7,8]),
+    ("yE", zipWith Well (repeat 'h') [9,10]),
+    ("yZ", zipWith Well (repeat 'h') [11,12]),
+    ("mC", zipWith Well ['a','b'] . repeat $ 12),
+    ("mD", zipWith Well ['c','d'] . repeat $ 12),
+    ("Wild Type", zipWith Well ['e'] . repeat $ 12),
+    ("Just Media", [Well 'g' 12])]
+
+pairsD :: Description
+pairsD = M.fromList . concatMap oldToNew $ [
+    ("AD", zipWith Well ['a'..'g'] . repeat $ 1),
+    -- ("A2", zipWith Well ['a'..'g'] . repeat $ 2),
+    ("BD", zipWith Well ['a'..'g'] . repeat $ 3),
+    -- ("B2", zipWith Well ['a'..'g'] . repeat $ 4),
+    -- ("D1", zipWith Well ['a'..'g'] . repeat $ 5),
+    ("DD", zipWith Well ['a'..'g'] . repeat $ 6),
+    -- ("E1", zipWith Well ['a'..'g'] . repeat $ 7),
+    ("ED", zipWith Well ['a'..'g'] . repeat $ 8),
+    ("ZD", zipWith Well ['a'..'g'] . repeat $ 9),
+    -- ("Z2", zipWith Well ['a'..'g'] . repeat $ 10),
+    ("yA", zipWith Well (repeat 'h') [1,2]),
+    ("yB", zipWith Well (repeat 'h') [3,4]),
+    ("yC", zipWith Well (repeat 'h') [5,6]),
+    ("yD", zipWith Well (repeat 'h') [7,8]),
+    ("yE", zipWith Well (repeat 'h') [9,10]),
+    ("yZ", zipWith Well (repeat 'h') [11,12]),
+    ("mC", zipWith Well ['a','b'] . repeat $ 12),
+    ("mD", zipWith Well ['c','d'] . repeat $ 12),
+    ("Wild Type", zipWith Well ['e','f'] . repeat $ 12),
+    ("Just Media", [Well 'g' 12])]
+ 
+convertMes :: Description -> OldMeasurement -> Maybe NewMeasurment
+convertMes d om = do
+    ml <- M.lookup (0,mWell om) d
+    return NewMeasurment { mExpId = "Converted", mLabel = ml, mOldMes = om }
 
 writeNewData :: FilePath -> [NewMeasurment] -> IO()
 writeNewData fn nm = do
