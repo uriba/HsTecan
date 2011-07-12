@@ -21,7 +21,7 @@ options :: [OptDescr (Options -> Options)]
 options = [
     Option ['o'] ["output"] (ReqArg (\f opts -> opts {optOutput = Just f}) "OUTPUT") "Optional output file name (default output is screen)",
     Option ['i'] ["input"] (ReqArg (\f opts -> opts {optInput = f}) "INPUT") "Input csv file",
-    Option ['x'] ["axes"] (ReqArg (\x opts -> opts {optAxes = read x}) "AXES") "Grid axes - e.g. (\"YFP\",\"MCHERRY\""
+    Option ['x'] ["axes"] (ReqArg (\x opts -> opts {optAxes = read x}) "AXES") "Grid axes - e.g. (\"YFP\",\"MCHERRY\")"
     ]
 
 plotMesApp :: ExpData -> Maybe FilePath -> String -> IO ()
@@ -51,11 +51,18 @@ plotGridApp ed axes mfn = do
     let file_data = genCsvFile . plotGridDataToStrings $ igd
     writeFile dfn file_data
 
+processOpt :: [String] -> Options
+processOpt args = case getOpt RequireOrder options args of
+	(o,_,[]) -> opt o
+	(_,_,m) -> error $ usageInfo header options
+	where
+	    opt o = foldl (flip id) defaultOptions o
+	    header = "Usage: PlotExpData [OPTION]"
+
 main :: IO ()
 main = do
     args <- getArgs
-    let (o,_,_) = getOpt RequireOrder options args
-    let opt = foldl (flip id) defaultOptions o
+    let opt = processOpt args
     let input_file = optInput $ opt
     ms <- loadExpData input_file
     putStrLn $ "processing:" ++ input_file
