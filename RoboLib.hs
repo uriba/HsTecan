@@ -17,6 +17,8 @@ module RoboLib (
     ExpData,
     expLevel,
     noTrans,
+    expMesTypes,
+    has,
     )
 where
 import Graphics.Gnuplot.Simple
@@ -48,8 +50,8 @@ data Measurement = Measurement { mExpDesc :: ExpId, mPlate :: PlateId, mTime :: 
 colonyId :: Measurement -> ColonyId
 colonyId (Measurement { mExpDesc = ed, mPlate = mp, mWell = mw }) = ColonyId { cExp = ed, cPlate = mp, cWell = mw }
 
-wildTypeId = "Wild Type" -- label of colonies that have wt bacteria (for auto-fluorescence cancellation)
-mediaId = "Just Media"  -- label of colonies that have no bacteria (for background cancellation)
+wildTypeId = "WT" -- label of colonies that have wt bacteria (for auto-fluorescence cancellation)
+mediaId = "BLANK"  -- label of colonies that have no bacteria (for background cancellation)
 
 type ExpData = M.Map Label (M.Map ColonyId [Measurement]) -- experiment data is mapped like this.
 
@@ -113,6 +115,9 @@ subtractConstantBackground ed = M.map (M.map (map (\x -> x {mVal = corrected_mva
 
 mesTypes :: [Measurement] -> [String]
 mesTypes = nub . map mType
+
+expMesTypes :: ExpData -> [String]
+expMesTypes = nub . map mType . concat . concatMap M.elems . M.elems
 
 meanL :: [Double] -> Double
 meanL = mean . V.fromList

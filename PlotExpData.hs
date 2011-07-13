@@ -2,6 +2,7 @@ import RoboLib
 import System (getArgs)
 import System.Console.GetOpt
 import Data.Maybe
+import Data.List (intersect)
 import Text.ParserCombinators.Parsec
 import Data.CSV
 
@@ -66,7 +67,10 @@ main = do
     let input_file = optInput $ opt
     ms <- loadExpData input_file
     putStrLn $ "processing:" ++ input_file
-    mapM_ (plotMesApp ms (optOutput opt)) ["OD600","MCHERRY","YFP","CFP"]
-    mapM_ (plotMesToODApp ms (optOutput opt)) ["MCHERRY","YFP","CFP"]
-    plotGridApp ms (optAxes opt) (optOutput opt)
+    let mes_types = intersect (expMesTypes ms) ["MCHERRY","YFP","CFP"]
+    mapM_ (plotMesApp ms (optOutput opt)) $ "OD600":mes_types
+    mapM_ (plotMesToODApp ms (optOutput opt)) mes_types
+    if (mes_types `has` (fst . optAxes $ opt)) && (mes_types `has` (snd . optAxes $ opt))
+	then plotGridApp ms (optAxes opt) (optOutput opt)
+	else return ()
     return ()
