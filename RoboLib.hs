@@ -172,7 +172,8 @@ createExpData ms = M.fromList [ (label, m_for_label label) | label <- labels ms]
 	m_for_label l = M.fromList [ (colony_id, m_for_colony colony_id) | colony_id <- colonies l ms ]
 
 odLiveThreshold = 0.2
-odThreshold = 0.04
+odThreshold = 0.06
+odMaxT = 0.15
 
 verifySingleColony :: [Measurement] -> [Measurement]
 verifySingleColony ms
@@ -214,7 +215,8 @@ mesToOd mt Nothing ms = mesToOd mt (Just . mesLimits mt $ ms) $ ms
 mesToOd mt (Just (low,high)) ms = m_to_od_vals
     where
 	vals t = take (high - low) . drop low . mesByTime t
-	m_to_od_vals = zipWith (/) (vals mt ms) . vals "OD600" $ ms
+	diffs x = zipWith (-) (tail x) x
+	m_to_od_vals = zipWith (/) (diffs . vals mt $ ms) . vals "OD600" $ ms
 
 removeDeadWells :: ExpData -> ExpData
 removeDeadWells = M.filter (not . M.null) . M.map (M.filter liveWell)
@@ -322,3 +324,48 @@ kdHist points_num dots = zip points_list values_list
 	(points,values) = KD.gaussianPDF points_num . DVU.fromList $ dots -- default KD
 	points_list = DVU.toList . KD.fromPoints $ points
 	values_list = DVU.toList values
+
+
+----------- smoothing
+windowSize = 5
+
+type SmoothDataset = [Double] -> [Double]
+
+changeVal :: Measurement -> Double -> Measurement
+changeVal m x = m {mVal = x}
+
+smoothMes :: SmoothDataset -> [Measurement] -> [Measurement]
+smoothMes f ms = zipWith ($) (map changeVal ordered_data) . f . map mVal $ ordered_data
+    where
+	ordered_data = sortBy (compare `on` mTime) ms
+
+applySmooth' :: SmoothDataset -> MType -> [Measurement] -> [Measurement]
+applySmooth' f mt ms = not_affected ++ smoothed
+    where
+	(affected,not_affected) = partition ((==) mt . mType) ms
+	smoothed = smoothMes f affected
+
+applySmooth :: SmoothDataset -> MType -> ExpData -> ExpData
+applySmooth f mt = M.map (M.map (applySmooth' f mt))
+
+smoothAll :: SmoothDataset -> ExpData -> ExpData
+smoothAll f ed = foldr (applySmooth f) ed ["OD600","MCHERRY","YFP","CFP"]
+
+bFiltS :: SmoothDataset
+bFiltS ds = mapMaybe (bFilt . take windowSize) . tails $ extended_dataset
+    where
+	extended_dataset = header ++ ds ++ trailer
+	header = replicate buf_size . head $ ds
+	trailer = replicate buf_size . last $ ds
+	buf_size = windowSize `div` 2
+
+bFilt :: [Double] -> Maybe Double
+bFilt xs
+    | length xs < windowSize = Nothing
+    | null relevant_data = val xs
+    | otherwise = val relevant_data
+	where
+	    mx = maximum xs
+	    mn = minimum xs
+	    val = Just . meanL 
+	    relevant_data = filter (\x -> x < mx && x > mn) $ xs
