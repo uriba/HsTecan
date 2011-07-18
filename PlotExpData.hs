@@ -69,8 +69,9 @@ main = do
     putStrLn $ "processing:" ++ input_file
     let mes_types = intersect (expMesTypes ms) ["MCHERRY","YFP","CFP"]
     mapM_ (plotMesApp ms (optOutput opt)) $ "OD600":mes_types
-    mapM_ (plotMesToODApp ms (optOutput opt)) mes_types
+    let sms = smoothAll bFiltS ms
+    mapM_ (plotMesToODApp sms (optOutput opt)) mes_types
     if (mes_types `has` (fst . optAxes $ opt)) && (mes_types `has` (snd . optAxes $ opt))
-	then plotGridApp ms (optAxes opt) (optOutput opt)
+	then plotGridApp sms (optAxes opt) (optOutput opt)
 	else return ()
     return ()

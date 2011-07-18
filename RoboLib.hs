@@ -18,6 +18,8 @@ module RoboLib (
     expLevel,
     noTrans,
     expMesTypes,
+    smoothAll,
+    bFiltS,
     has,
     )
 where
