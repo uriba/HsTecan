@@ -240,7 +240,7 @@ odLimits ods = (low,high)
     where
 	rods = reverse ods
 	low = length ods - (fromMaybe (minIdx rods) . findIndex (< odThreshold) $ rods)
-	high = length ods - (fromJust . findIndex (< upper_limit ods) $ rods)
+	high = length ods -- (fromJust . findIndex (< upper_limit ods) $ rods)
 	upper_limit x = (minimum x + maximum x) / 2
 
 mesLimits :: MType -> [Measurement] -> (Int,Int)
@@ -255,7 +255,7 @@ expLevel mt = meanL . mesToOd mt Nothing
 expLevels :: ExpData -> ExpLevelData
 expLevels ed = M.map (M.map (\x -> [(m,mesToOd m Nothing x) | m <- mesTypes x])) ed
 
-subtractAutoFluorescence :: ExpData -> ExpLevelData
+subtractAutoFluorescence :: ExpData -> ExpLevelData -- need adjustment for df/dt and maximum value selection
 subtractAutoFluorescence ed = M.map (M.map (map (\(mt,vals) -> (mt, map (corrected_el mt) vals)))) . expLevels $ ed
     where
 	corrected_el mt x = fromMaybe x $ do
@@ -273,9 +273,10 @@ noTrans = (id,id)
 intensityGridData :: ExpData -> (String,String) -> AxesTrans -> PlotGridData
 intensityGridData ed (xtype,ytype) (fx,fy) = grid_points
     where
-	data_sets = subtractAutoFluorescence . removeDeadWells . normalizePlate $ ed
-	plot_vals = M.map (M.map (map (\(mt,vals) -> (mt, meanL vals)))) data_sets
+	data_sets = {-subtractAutoFluorescence . -}expLevels . removeDeadWells . normalizePlate $ ed
+	plot_vals = M.map (M.map (map (\(mt,vals) -> (mt, calcexp vals)))) data_sets
 	grid_points = M.map (M.map (\x -> (fx . fromJust . lookup xtype $ x,fy . fromJust . lookup ytype $ x))) plot_vals
+	calcexp = maximum -- . map (meanL . take 3) . tails -- this is the strategy for calculating the expression level from its distinct values. it takes the maximum of the averages over windows of size 3.
 
 plotGrid :: String -> PlotGridData -> (String,String) -> Maybe FilePath -> IO ()
 plotGrid title pgd (xtype,ytype) m_fn = plotPathsStyle plot_attrs plot_lines
