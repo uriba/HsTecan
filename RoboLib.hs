@@ -1,5 +1,6 @@
 module RoboLib (
     Well (..),
+    wellFromInts,
     Measurement (..),
     plotIntensityGrid,
     plotMesToOD,
@@ -15,6 +16,9 @@ module RoboLib (
     PlotGridData,
     loadExpData,
     ExpData,
+    createExpData,
+    ExpId,
+    MType,
     expLevel,
     noTrans,
     expMesTypes,
@@ -264,7 +268,7 @@ subtractAutoFluorescence ed = M.map (M.map (map (\(mt,vals) -> (mt, map (correct
 	    return $ max (minValMap ! mt) (x - af)
 
 fileOpts :: String -> [Attribute]
-fileOpts fn = [ Custom "terminal" ["svg", "size 1000,1000"], Custom "output" ["\"" ++ fn ++ "\""]]
+fileOpts fn = [ Custom "terminal" ["png", "size 1000,1000"], Custom "output" ["\"" ++ fn ++ "\""]]
 
 type AxesTrans = ((Double -> Double),(Double -> Double))
 
