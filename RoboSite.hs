@@ -57,10 +57,10 @@ type Plate = String
 type GraphType = String
 
 mkYesod "RoboSite" [$parseRoutes|
-/ HomeR GET
-/graph/#ExpId/#Plate/#GraphType/Read ReadGraph GET
-/graph/#ExpId/#Plate/#GraphType/Exp ExpLevelGraph GET
-/graph/#ExpId/#Plate/#GraphType/#GraphType/Exp GridGraph GET
+/RoboSite HomeR GET
+/RoboSite/graph/#ExpId/#Plate/#GraphType/Read ReadGraph GET
+/RoboSite/graph/#ExpId/#Plate/#GraphType/Exp ExpLevelGraph GET
+/RoboSite/graph/#ExpId/#Plate/#GraphType/#GraphType/Exp GridGraph GET
 |]
 
 instance Yesod RoboSite where
