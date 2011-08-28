@@ -9,7 +9,9 @@ import Data.Function (on)
 import Data.List (nub, find, sort)
 import System.FilePath (makeValid, (<.>))
 import Math.Combinatorics.Graph (combinationsOf)
-import RoboLib (Measurement(..), Well(..), wellFromInts, createExpData, ExpData, plotData, mesData, expMesTypes, ExpId, MType, mesToOdData, plotIntensityGrid)
+import RoboLib (Measurement(..), Well(..), wellFromInts, createExpData, ExpData, plotData, mesData, expMesTypes, ExpId, MType, mesToOdData, plotIntensityGrid, smoothAll, bFiltS)
+import qualified Data.Text as T
+import Control.Applicative ((<$>))
 
 hostName = "132.77.80.238"
 userName = "ronm"
@@ -26,13 +28,14 @@ dbToMes [SqlByteString exp_id, SqlInt32 plate_num, SqlByteString mt, SqlInt32 ro
 	mPlate = fromIntegral plate_num,
 	mTime = fromSeconds . fromIntegral $ timestamp,
 	mType = toString mt,
-	mWell = (wellFromInts `on` fromIntegral) row col,
-	mLabel = show row ++ show col,
+	mWell = well,
+	mLabel = concat ["(", [wRow well],",",show . wColumn $ well,")"], 
 	mVal = val v
     }
         where
             val (SqlDouble x) = if x == 0 then maxVal else x
             val SqlNull = maxVal
+            well = (wellFromInts `on` fromIntegral) row col
 
 data GraphDesc = GraphDesc {gdExp :: ExpId, gdPlate :: Plate, gdMesType :: MType, gdExpDesc :: Maybe String, gdPlateDesc :: Maybe String} deriving (Show)
 
@@ -66,9 +69,7 @@ loadExps :: IO [GraphDesc]
 loadExps = do
     conn <- connectMySQL $ MySQLConnectInfo hostName userName password dbName port unixSocket
     sql_vals <- quickQuery' conn "SELECT DISTINCT exp_id,plate,reading_label FROM tecan_readings" []
-    putStrLn . show . head $ sql_vals
     exp_descs <-  quickQuery' conn "SELECT * FROM tecan_experiments" []
-    putStrLn . show . head $ exp_descs
     let descs = map dbToExpDesc exp_descs
     return . map (dbToGraphDesc descs) $ sql_vals
 
@@ -78,6 +79,7 @@ type GraphType = String
 
 mkYesod "RoboSite" [$parseRoutes|
 /RoboSite HomeR GET
+/RoboSite/update/#ExpId/ UpdateExpDesc GET
 /RoboSite/graph/#ExpId/#Plate/#GraphType/Read ReadGraph GET
 /RoboSite/graph/#ExpId/#Plate/#GraphType/Exp ExpLevelGraph GET
 /RoboSite/graph/#ExpId/#Plate/#GraphType/#GraphType/Exp GridGraph GET
@@ -97,14 +99,16 @@ plotMesApp ed fn t = do
 
 plotMesToODApp :: ExpData -> FilePath -> String -> IO ()
 plotMesToODApp ed fn t = do
-    let pd = mesToOdData ed t Nothing
+    let sms = smoothAll bFiltS ed
+    let pd = mesToOdData sms t Nothing
     let	ofn = pngFileName fn
     plotData t pd (Just ofn)
 
 plotGridApp :: ExpData -> (String,String) -> FilePath -> IO ()
 plotGridApp ed axes fn = do
     let ofn = pngFileName fn
-    plotIntensityGrid ed axes (logBase 10, logBase 10) (Just ofn)
+    let sms = smoothAll bFiltS ed
+    plotIntensityGrid sms axes (logBase 10, logBase 10) (Just ofn)
 
 getGridGraph :: ExpId -> Plate -> GraphType -> GraphType -> GHandler RoboSite RoboSite RepHtml
 getGridGraph exp plate x y = do
@@ -129,6 +133,38 @@ getReadGraph exp plate graph = do
     liftIO $ putStrLn ("generating: " ++ pngFileName fn)
     liftIO $ plotMesApp exp_data fn graph
     sendFile typePng $ pngFileName fn
+
+updateExpLabel :: ExpId -> String -> IO ()
+updateExpLabel eid l = do
+    conn <- connectMySQL $ MySQLConnectInfo hostName userName password dbName port unixSocket
+    _ <- run conn "UPDATE tecan_experiments SET description = ? WHERE exp_id = ?" [toSql l, toSql eid]
+    return ()
+
+data Params = Params {label :: T.Text}
+
+expDescFormlet :: Formlet s m Params
+expDescFormlet mdesc = fieldsToTable $ Params <$> stringField "Label" (fmap label mdesc)
+
+getUpdateExpDesc :: ExpId -> GHandler RoboSite RoboSite RepHtml
+getUpdateExpDesc eid = do
+    let mexp_label = Just . Params . T.pack $ "default"
+    (res, form, enctype) <- runFormGet $ expDescFormlet mexp_label
+    output <-
+        case res of
+            FormMissing -> return . T.pack $ "Enter new experiment label"
+            FormFailure _ -> return . T.pack $ "Please correct the errors below."
+            FormSuccess (Params label) -> do
+                liftIO . updateExpLabel eid . T.unpack $ label
+                return . T.pack $ "Label updated"
+    defaultLayout [$hamlet|
+<p>Enter new experiment label
+<form enctype="#{enctype}">
+    <table>
+        ^{form}
+        <tr>
+            <td colspan="2">
+                <input type="submit" value="Update">
+|]
 
 plates :: ExpId -> [GraphDesc] -> [(Plate,Maybe String)]
 plates eid gds = nub [(gdPlate x, gdPlateDesc x) | x <- gds, gdExp x == eid]
@@ -162,6 +198,9 @@ getHomeR = do
                     #{fst exp}: #{desc}
                 $nothing
                     #{fst exp}
+            \ #
+            <a href=@{UpdateExpDesc (fst exp)}>
+                [Update label]
             <div ##{fst exp} style="display: none;">
                 <ul>
                    $forall plate <- plates (fst exp) disp_data
