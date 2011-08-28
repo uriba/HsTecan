@@ -18,16 +18,21 @@ dbName = "tecan"
 port = 3306
 unixSocket = "/tmp/mysql.sock"
 
+maxVal = 70000
+
 dbToMes :: [SqlValue] -> Measurement
-dbToMes [SqlByteString exp_id, SqlInt32 plate_num, SqlByteString mt, SqlInt32 row, SqlInt32 col, SqlInt32 timestamp, SqlDouble val] = Measurement {
+dbToMes [SqlByteString exp_id, SqlInt32 plate_num, SqlByteString mt, SqlInt32 row, SqlInt32 col, SqlInt32 timestamp, v] = Measurement {
 	mExpDesc = toString exp_id,
 	mPlate = fromIntegral plate_num,
 	mTime = fromSeconds . fromIntegral $ timestamp,
 	mType = toString mt,
 	mWell = (wellFromInts `on` fromIntegral) row col,
 	mLabel = show row ++ show col,
-	mVal = val
+	mVal = val v
     }
+        where
+            val (SqlDouble x) = if x == 0 then maxVal else x
+            val SqlNull = maxVal
 
 data GraphDesc = GraphDesc {gdExp :: ExpId, gdPlate :: Plate, gdMesType :: MType, gdExpDesc :: Maybe String, gdPlateDesc :: Maybe String} deriving (Show)
 
