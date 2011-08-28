@@ -6,7 +6,7 @@ import Database.HDBC
 import Data.ByteString.UTF8 (toString)
 import Data.DateTime (fromSeconds)
 import Data.Function (on)
-import Data.List (nub)
+import Data.List (nub, find, sort)
 import System.FilePath (makeValid, (<.>))
 import Math.Combinatorics.Graph (combinationsOf)
 import RoboLib (Measurement(..), Well(..), wellFromInts, createExpData, ExpData, plotData, mesData, expMesTypes, ExpId, MType, mesToOdData, plotIntensityGrid)
@@ -29,17 +29,29 @@ dbToMes [SqlByteString exp_id, SqlInt32 plate_num, SqlByteString mt, SqlInt32 ro
 	mVal = val
     }
 
-data GraphDesc = GraphDesc {gdExp :: ExpId, gdPlate :: Plate, gdMesType :: MType }
+data GraphDesc = GraphDesc {gdExp :: ExpId, gdPlate :: Plate, gdMesType :: MType, gdExpDesc :: Maybe String, gdPlateDesc :: Maybe String} deriving (Show)
 
-dbToExpId :: [SqlValue] -> GraphDesc
-dbToExpId [SqlByteString exp_id, SqlInt32 p, SqlByteString mt] =
+data ExpDesc = ExpDesc {edExp :: ExpId, edPlate :: Plate, edDesc :: String} deriving (Show)
+
+dbToExpDesc :: [SqlValue] -> ExpDesc
+dbToExpDesc [SqlByteString exp_id, SqlInt32 p, SqlByteString desc] = 
+    ExpDesc {
+        edExp = toString exp_id,
+        edPlate = show p,
+        edDesc = toString desc
+    }
+
+dbToGraphDesc :: [ExpDesc] -> [SqlValue] -> GraphDesc
+dbToGraphDesc descs [SqlByteString exp_id, SqlInt32 p, SqlByteString mt] =
     GraphDesc {
 	gdExp = toString exp_id,
 	gdPlate = show p,
-	gdMesType = toString mt
+	gdMesType = toString mt,
+    gdExpDesc = fmap edDesc . find (\x -> edExp x == toString exp_id && edPlate x == "-1") $ descs,
+    gdPlateDesc = fmap edDesc . find (\x -> edExp x == toString exp_id && edPlate x == show p) $ descs
     }
 
-loadExpDataDB :: String -> Int -> IO ExpData
+loadExpDataDB :: ExpId -> Int -> IO ExpData
 loadExpDataDB exp_id p = do
     conn <- connectMySQL $ MySQLConnectInfo hostName userName password dbName port unixSocket
     sql_vals <- quickQuery conn "SELECT * from tecan_readings where exp_id = ?" [toSql exp_id]
@@ -50,7 +62,10 @@ loadExps = do
     conn <- connectMySQL $ MySQLConnectInfo hostName userName password dbName port unixSocket
     sql_vals <- quickQuery' conn "SELECT DISTINCT exp_id,plate,reading_label FROM tecan_readings" []
     putStrLn . show . head $ sql_vals
-    return . map dbToExpId $ sql_vals
+    exp_descs <-  quickQuery' conn "SELECT * FROM tecan_experiments" []
+    putStrLn . show . head $ exp_descs
+    let descs = map dbToExpDesc exp_descs
+    return . map (dbToGraphDesc descs) $ sql_vals
 
 data RoboSite = RoboSite
 type Plate = String
@@ -110,8 +125,8 @@ getReadGraph exp plate graph = do
     liftIO $ plotMesApp exp_data fn graph
     sendFile typePng $ pngFileName fn
 
-plates :: ExpId -> [GraphDesc] -> [Plate]
-plates eid = nub . map gdPlate . filter ((==) eid . gdExp)
+plates :: ExpId -> [GraphDesc] -> [(Plate,Maybe String)]
+plates eid gds = nub [(gdPlate x, gdPlateDesc x) | x <- gds, gdExp x == eid]
 
 readings :: ExpId -> Plate -> [GraphDesc] -> [MType]
 readings eid p = nub . map gdMesType . filter (\x -> gdExp x == eid && gdPlate x == p)
@@ -126,47 +141,53 @@ grids e p gd = zip (map head all_pairs) (map last all_pairs)
 
 getHomeR :: GHandler RoboSite RoboSite RepHtml
 getHomeR = do
-    exps <- liftIO loadExps
-    let exp_ids = nub . map gdExp $ exps
-    liftIO $ putStrLn "Welcome to the Robosite"
+    disp_data <- liftIO loadExps
+    let exp_descs =  reverse . sort . nub $ [ (gdExp x, gdExpDesc x) | x <- disp_data]
+    let exp_ids = nub . map gdExp $ disp_data
     defaultLayout $ do
         setTitle "Robosite"
         addHamlet [$hamlet|
 <h1> Welcome to the Robosite
 <h2> experiments list:
 <ul>
-    $forall expid <- exp_ids
+    $forall exp <- exp_descs
         <li>
-            <a href="#" onclick="toggleDisplay('#{expid}');">
-                #{expid}
-            <div ##{expid} style="display: none;">
+            <a href="#" onclick="toggleDisplay('#{fst exp}');">
+                $maybe desc <- snd exp
+                    #{fst exp}: #{desc}
+                $nothing
+                    #{fst exp}
+            <div ##{fst exp} style="display: none;">
                 <ul>
-                   $forall plate <- plates expid exps
+                   $forall plate <- plates (fst exp) disp_data
                        <li>
-                            <a href="#" onclick="toggleDisplay('#{expid}#{plate}');">
-                                Plate #{plate}
-                            <div ##{expid}#{plate} style="display: none;">
+                            <a href="#" onclick="toggleDisplay('#{fst exp}#{fst plate}');">
+                                $maybe desc <- snd plate
+                                    Plate #{fst plate}: #{desc}
+                                $nothing
+                                    Plate #{fst plate}
+                            <div ##{fst exp}#{fst plate} style="display: none;">
                                 <ul>
                                     <li>
                                         Raw sensor readings
                                         <ul>
-                                            $forall mtype <- readings expid plate exps
+                                            $forall mtype <- readings (fst exp) (fst plate) disp_data
                                                 <li>
-                                                    <a href=@{ReadGraph expid plate mtype}>
+                                                    <a href=@{ReadGraph (fst exp) (fst plate) mtype}>
                                                         #{mtype}
                                     <li>
                                         Expression levels
                                         <ul>
-                                            $forall mtype <- expLevels expid plate exps
+                                            $forall mtype <- expLevels (fst exp) (fst plate) disp_data
                                                 <li>
-                                                    <a href=@{ExpLevelGraph expid plate mtype}>
+                                                    <a href=@{ExpLevelGraph (fst exp) (fst plate) mtype}>
                                                         #{mtype}
                                     <li>
                                         Grids
                                         <ul>
-                                            $forall grid <- grids expid plate exps
+                                            $forall grid <- grids (fst exp) (fst plate) disp_data
                                                 <li>
-                                                    <a href=@{GridGraph expid plate (fst grid) (snd grid)}>
+                                                    <a href=@{GridGraph (fst exp) (fst plate) (fst grid) (snd grid)}>
                                                         #{fst grid},#{snd grid}
 |]
         addJulius [$julius|
