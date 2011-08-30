@@ -10,10 +10,11 @@ import Data.Maybe (isJust, fromJust, fromMaybe)
 import System.FilePath (makeValid, (<.>))
 import Math.Combinatorics.Graph (combinationsOf)
 import RoboDB (ExpDesc(..), PlateDesc(..), WellDesc(..), DbMeasurement (..), readTable, DbReadable(..), dbConnectInfo, SelectCriteria(..))
-import RoboLib (Measurement(..), Well(..), wellFromInts, createExpData, ExpData, plotData, mesData, expMesTypes, ExpId, MType, mesToOdData, plotIntensityGrid, smoothAll, bFiltS)
+import RoboLib (Measurement(..), Well(..), wellFromInts, createExpData, ExpData, plotData, mesData, expMesTypes, ExpId, MType, mesToOdData, plotIntensityGrid, smoothAll, bFiltS, intensityGridData, plotGridDataToStrings, plotLinesDataToStrings)
 import qualified Data.Text as T
 import qualified Data.Map as M
 import Control.Applicative ((<$>))
+import Data.CSV (genCsvFile)
 
 data GraphDesc = GraphDesc {gdExp :: ExpId, gdPlate :: Plate, gdMesType :: MType, gdExpDesc :: Maybe String, gdPlateDesc :: Maybe String} deriving (Show)
 
@@ -64,8 +65,11 @@ mkYesod "RoboSite" [$parseRoutes|
 /RoboSite/update/#ExpId/ UpdateExpDesc GET
 /RoboSite/update/#ExpId/#Plate/ UpdatePlateDesc GET
 /RoboSite/graph/#ExpId/#Plate/#GraphType/Read ReadGraph GET
+/RoboSite/data/#ExpId/#Plate/#GraphType/Read ReadGraphData GET
 /RoboSite/graph/#ExpId/#Plate/#GraphType/Exp ExpLevelGraph GET
+/RoboSite/data/#ExpId/#Plate/#GraphType/Exp ExpLevelData GET
 /RoboSite/graph/#ExpId/#Plate/#GraphType/#GraphType/Exp GridGraph GET
+/RoboSite/data/#ExpId/#Plate/#GraphType/#GraphType/Exp GridGraphData GET
 |]
 
 instance Yesod RoboSite where
@@ -93,6 +97,14 @@ plotGridApp ed axes fn = do
     let sms = smoothAll bFiltS ed
     plotIntensityGrid sms axes (logBase 10, logBase 10) (Just ofn)
 
+getGridGraphData :: ExpId -> Plate -> MType -> MType -> GHandler RoboSite RoboSite RepHtml
+getGridGraphData exp plate x y = do
+    exp_data <- liftIO $ loadExpDataDB exp (read plate)
+    let sms = smoothAll bFiltS exp_data
+    let igd = intensityGridData sms (x,y) (logBase 10, logBase 10)
+    let bytes = genCsvFile . plotGridDataToStrings $ igd
+    sendResponse (typePlain, toContent bytes)
+
 getGridGraph :: ExpId -> Plate -> GraphType -> GraphType -> GHandler RoboSite RoboSite RepHtml
 getGridGraph exp plate x y = do
     exp_data <- liftIO $ loadExpDataDB exp (read plate)
@@ -101,6 +113,14 @@ getGridGraph exp plate x y = do
     liftIO $ plotGridApp exp_data (x,y) fn
     sendFile typePng $ pngFileName fn
 
+getExpLevelData :: ExpId -> Plate -> MType -> GHandler RoboSite RoboSite RepHtml
+getExpLevelData exp plate t = do
+    exp_data <- liftIO $ loadExpDataDB exp (read plate)
+    let sms = smoothAll bFiltS exp_data
+    let pd = mesToOdData sms t Nothing
+    let bytes = genCsvFile . plotLinesDataToStrings $ pd
+    sendResponse (typePlain, toContent bytes)
+
 getExpLevelGraph :: ExpId -> Plate -> GraphType -> GHandler RoboSite RoboSite RepHtml
 getExpLevelGraph exp plate graph = do
     exp_data <- liftIO $ loadExpDataDB exp (read plate)
@@ -108,6 +128,13 @@ getExpLevelGraph exp plate graph = do
     liftIO $ putStrLn ("generating: " ++ pngFileName fn)
     liftIO $ plotMesToODApp exp_data fn graph
     sendFile typePng $ pngFileName fn
+
+getReadGraphData :: ExpId -> Plate -> MType -> GHandler RoboSite RoboSite RepHtml
+getReadGraphData exp plate t = do
+    exp_data <- liftIO $ loadExpDataDB exp (read plate)
+    let pd = mesData exp_data t
+    let bytes = genCsvFile . plotLinesDataToStrings $ pd
+    sendResponse (typePlain, toContent bytes)
 
 getReadGraph :: ExpId -> Plate -> GraphType -> GHandler RoboSite RoboSite RepHtml
 getReadGraph exp plate graph = do
@@ -221,6 +248,9 @@ getHomeR = do
                                                 <li>
                                                     <a href=@{ReadGraph (fst exp) (fst plate) mtype}>
                                                         #{mtype}
+                                                    \ #
+                                                    <a href=@{ReadGraphData (fst exp) (fst plate) mtype}>
+                                                        [Get data]
                                     <li>
                                         Expression levels
                                         <ul>
@@ -228,6 +258,9 @@ getHomeR = do
                                                 <li>
                                                     <a href=@{ExpLevelGraph (fst exp) (fst plate) mtype}>
                                                         #{mtype}
+                                                    \ #
+                                                    <a href=@{ExpLevelData (fst exp) (fst plate) mtype}>
+                                                        [Get data]
                                     <li>
                                         Grids
                                         <ul>
@@ -235,6 +268,9 @@ getHomeR = do
                                                 <li>
                                                     <a href=@{GridGraph (fst exp) (fst plate) (fst grid) (snd grid)}>
                                                         #{fst grid},#{snd grid}
+                                                    \ #
+                                                    <a href=@{GridGraphData (fst exp) (fst plate) (fst grid) (snd grid)}>
+                                                        [Get data]
 |]
         addJulius [$julius|
 function toggleDisplay(element_name) {
