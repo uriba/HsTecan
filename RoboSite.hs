@@ -24,40 +24,49 @@ unixSocket = "/tmp/mysql.sock"
 
 maxVal = 70000
 
-dbToMes :: [SqlValue] -> Measurement
-dbToMes [SqlByteString exp_id, SqlInt32 plate_num, SqlByteString mt, SqlInt32 row, SqlInt32 col, SqlInt32 timestamp, v] = Measurement {
-	mExpDesc = toString exp_id,
-	mPlate = fromIntegral plate_num,
-	mTime = fromSeconds . fromIntegral $ timestamp,
-	mType = toString mt,
-	mWell = well,
-	mLabel = concat ["(", [wRow well],",",show . wColumn $ well,")"], 
-	mVal = val v
-    }
-        where
-            val (SqlDouble x) = if x == 0 then maxVal else x
-            val SqlNull = maxVal
-            well = (wellFromInts `on` fromIntegral) row col
+class DbReadable a where
+    dbRead :: [SqlValue] -> a
+instance DbReadable Measurement where
+    dbRead [SqlByteString exp_id, SqlInt32 plate_num, SqlByteString mt, SqlInt32 row, SqlInt32 col, SqlInt32 timestamp, v] =
+        Measurement {
+            mExpDesc = toString exp_id,
+            mPlate = fromIntegral plate_num,
+            mTime = fromSeconds . fromIntegral $ timestamp,
+            mType = toString mt,
+            mWell = well,
+            mLabel = concat ["(", [wRow well],",",show . wColumn $ well,")"], 
+            mVal = val v
+            }
+                where
+                    val (SqlDouble x) = if x == 0 then maxVal else x
+                    val SqlNull = maxVal
+                    well = (wellFromInts `on` fromIntegral) row col
 
 data GraphDesc = GraphDesc {gdExp :: ExpId, gdPlate :: Plate, gdMesType :: MType, gdExpDesc :: Maybe String, gdPlateDesc :: Maybe String} deriving (Show)
 
 data ExpDesc = ExpDesc {edExp :: ExpId, edDesc :: String} deriving (Show)
 data PlateDesc = PlateDesc {pdExp :: ExpId, pdPlate :: Int, pdDesc :: String} deriving (Show)
 
-dbToExpDesc :: [SqlValue] -> ExpDesc
-dbToExpDesc [SqlByteString exp_id, SqlByteString desc] = 
-    ExpDesc {
-        edExp = toString exp_id,
-        edDesc = toString desc
-    }
+instance DbReadable ExpDesc where
+    dbRead [SqlByteString exp_id, SqlByteString desc] = 
+        ExpDesc {
+            edExp = toString exp_id,
+            edDesc = toString desc
+        }
 
-dbToPlateDesc :: [SqlValue] -> PlateDesc
-dbToPlateDesc [SqlByteString exp_id, SqlInt32 p, SqlByteString desc] = 
-    PlateDesc {
-        pdExp = toString exp_id,
-        pdPlate = fromIntegral p,
-        pdDesc = toString desc
-    }
+instance DbReadable PlateDesc where
+    dbRead [SqlByteString exp_id, SqlInt32 p, SqlByteString desc] = 
+        PlateDesc {
+            pdExp = toString exp_id,
+            pdPlate = fromIntegral p,
+            pdDesc = toString desc
+        }
+
+readTable :: (DbReadable a) => String -> IO [a]
+readTable t_name = do
+    conn <- connectMySQL $ MySQLConnectInfo hostName userName password dbName port unixSocket
+    entries <-  quickQuery' conn ("SELECT * FROM " ++ t_name) []
+    return . map dbRead $ entries
 
 dbToGraphDesc :: [ExpDesc] -> [PlateDesc] -> [SqlValue] -> GraphDesc
 dbToGraphDesc exp_descs plate_descs [SqlByteString exp_id, SqlInt32 p, SqlByteString mt] =
@@ -73,16 +82,14 @@ loadExpDataDB :: ExpId -> Int -> IO ExpData
 loadExpDataDB exp_id p = do
     conn <- connectMySQL $ MySQLConnectInfo hostName userName password dbName port unixSocket
     sql_vals <- quickQuery conn "SELECT * from tecan_readings where exp_id = ? AND plate = ?" [toSql exp_id, toSql p]
-    return . createExpData . filter ((==) p . mPlate) . map dbToMes $ sql_vals
+    return . createExpData . filter ((==) p . mPlate) . map dbRead $ sql_vals
 
 loadExps :: IO [GraphDesc]
 loadExps = do
     conn <- connectMySQL $ MySQLConnectInfo hostName userName password dbName port unixSocket
     sql_vals <- quickQuery' conn "SELECT DISTINCT exp_id,plate,reading_label FROM tecan_readings" []
-    db_exp_descs <-  quickQuery' conn "SELECT * FROM tecan_experiments" []
-    let exp_descs = map dbToExpDesc db_exp_descs
-    db_plate_descs <-  quickQuery' conn "SELECT * FROM tecan_plates" []
-    let plate_descs = map dbToPlateDesc db_plate_descs
+    exp_descs <- readTable "tecan_experiments"
+    plate_descs <- readTable "tecan_plates"
     return . map (dbToGraphDesc exp_descs plate_descs) $ sql_vals
 
 data RoboSite = RoboSite
