@@ -7,10 +7,12 @@ import Data.ByteString.UTF8 (toString)
 import Data.DateTime (fromSeconds)
 import Data.Function (on)
 import Data.List (nub, find, sort)
+import Data.Maybe (isJust, fromJust)
 import System.FilePath (makeValid, (<.>))
 import Math.Combinatorics.Graph (combinationsOf)
 import RoboLib (Measurement(..), Well(..), wellFromInts, createExpData, ExpData, plotData, mesData, expMesTypes, ExpId, MType, mesToOdData, plotIntensityGrid, smoothAll, bFiltS)
 import qualified Data.Text as T
+import qualified Data.Map as M
 import Control.Applicative ((<$>))
 
 hostName = "132.77.80.238"
@@ -39,39 +41,49 @@ dbToMes [SqlByteString exp_id, SqlInt32 plate_num, SqlByteString mt, SqlInt32 ro
 
 data GraphDesc = GraphDesc {gdExp :: ExpId, gdPlate :: Plate, gdMesType :: MType, gdExpDesc :: Maybe String, gdPlateDesc :: Maybe String} deriving (Show)
 
-data ExpDesc = ExpDesc {edExp :: ExpId, edPlate :: Plate, edDesc :: String} deriving (Show)
+data ExpDesc = ExpDesc {edExp :: ExpId, edDesc :: String} deriving (Show)
+data PlateDesc = PlateDesc {pdExp :: ExpId, pdPlate :: Int, pdDesc :: String} deriving (Show)
 
 dbToExpDesc :: [SqlValue] -> ExpDesc
-dbToExpDesc [SqlByteString exp_id, SqlInt32 p, SqlByteString desc] = 
+dbToExpDesc [SqlByteString exp_id, SqlByteString desc] = 
     ExpDesc {
         edExp = toString exp_id,
-        edPlate = show p,
         edDesc = toString desc
     }
 
-dbToGraphDesc :: [ExpDesc] -> [SqlValue] -> GraphDesc
-dbToGraphDesc descs [SqlByteString exp_id, SqlInt32 p, SqlByteString mt] =
+dbToPlateDesc :: [SqlValue] -> PlateDesc
+dbToPlateDesc [SqlByteString exp_id, SqlInt32 p, SqlByteString desc] = 
+    PlateDesc {
+        pdExp = toString exp_id,
+        pdPlate = fromIntegral p,
+        pdDesc = toString desc
+    }
+
+dbToGraphDesc :: [ExpDesc] -> [PlateDesc] -> [SqlValue] -> GraphDesc
+dbToGraphDesc exp_descs plate_descs [SqlByteString exp_id, SqlInt32 p, SqlByteString mt] =
     GraphDesc {
 	gdExp = toString exp_id,
 	gdPlate = show p,
 	gdMesType = toString mt,
-    gdExpDesc = fmap edDesc . find (\x -> edExp x == toString exp_id && edPlate x == "-1") $ descs,
-    gdPlateDesc = fmap edDesc . find (\x -> edExp x == toString exp_id && edPlate x == show p) $ descs
+    gdExpDesc = fmap edDesc . find (\x -> edExp x == toString exp_id) $ exp_descs,
+    gdPlateDesc = fmap pdDesc . find (\x -> pdExp x == toString exp_id && pdPlate x == fromIntegral p) $ plate_descs
     }
 
 loadExpDataDB :: ExpId -> Int -> IO ExpData
 loadExpDataDB exp_id p = do
     conn <- connectMySQL $ MySQLConnectInfo hostName userName password dbName port unixSocket
-    sql_vals <- quickQuery conn "SELECT * from tecan_readings where exp_id = ?" [toSql exp_id]
+    sql_vals <- quickQuery conn "SELECT * from tecan_readings where exp_id = ? AND plate = ?" [toSql exp_id, toSql p]
     return . createExpData . filter ((==) p . mPlate) . map dbToMes $ sql_vals
 
 loadExps :: IO [GraphDesc]
 loadExps = do
     conn <- connectMySQL $ MySQLConnectInfo hostName userName password dbName port unixSocket
     sql_vals <- quickQuery' conn "SELECT DISTINCT exp_id,plate,reading_label FROM tecan_readings" []
-    exp_descs <-  quickQuery' conn "SELECT * FROM tecan_experiments" []
-    let descs = map dbToExpDesc exp_descs
-    return . map (dbToGraphDesc descs) $ sql_vals
+    db_exp_descs <-  quickQuery' conn "SELECT * FROM tecan_experiments" []
+    let exp_descs = map dbToExpDesc db_exp_descs
+    db_plate_descs <-  quickQuery' conn "SELECT * FROM tecan_plates" []
+    let plate_descs = map dbToPlateDesc db_plate_descs
+    return . map (dbToGraphDesc exp_descs plate_descs) $ sql_vals
 
 data RoboSite = RoboSite
 type Plate = String
@@ -80,6 +92,7 @@ type GraphType = String
 mkYesod "RoboSite" [$parseRoutes|
 /RoboSite HomeR GET
 /RoboSite/update/#ExpId/ UpdateExpDesc GET
+/RoboSite/update/#ExpId/#Plate/ UpdatePlateDesc GET
 /RoboSite/graph/#ExpId/#Plate/#GraphType/Read ReadGraph GET
 /RoboSite/graph/#ExpId/#Plate/#GraphType/Exp ExpLevelGraph GET
 /RoboSite/graph/#ExpId/#Plate/#GraphType/#GraphType/Exp GridGraph GET
@@ -134,30 +147,46 @@ getReadGraph exp plate graph = do
     liftIO $ plotMesApp exp_data fn graph
     sendFile typePng $ pngFileName fn
 
+updatePlateLabel :: ExpId -> Int -> String -> IO ()
+updatePlateLabel eid p l = do
+    conn <- connectMySQL $ MySQLConnectInfo hostName userName password dbName port unixSocket
+    _ <- run conn "INSERT INTO tecan_plates (exp_id,plate,description) VALUES (?,?,?) ON DUPLICATE KEY UPDATE description = ?" [toSql eid, toSql p, toSql l, toSql l]
+    return ()
+
 updateExpLabel :: ExpId -> String -> IO ()
 updateExpLabel eid l = do
     conn <- connectMySQL $ MySQLConnectInfo hostName userName password dbName port unixSocket
-    _ <- run conn "UPDATE tecan_experiments SET description = ? WHERE exp_id = ?" [toSql l, toSql eid]
+    _ <- run conn "INSERT INTO tecan_experiments (exp_id,description) VALUES (?,?) ON DUPLICATE KEY UPDATE description = ?" [toSql eid, toSql l, toSql l]
     return ()
 
 data Params = Params {label :: T.Text}
 
-expDescFormlet :: Formlet s m Params
-expDescFormlet mdesc = fieldsToTable $ Params <$> stringField "Label" (fmap label mdesc)
+descFormlet :: Formlet s m Params
+descFormlet mdesc = fieldsToTable $ Params <$> stringField "Label" (fmap label mdesc)
+
+getUpdatePlateDesc :: ExpId -> Plate -> GHandler RoboSite RoboSite RepHtml
+getUpdatePlateDesc eid p = updateDesc eid (Just p)
 
 getUpdateExpDesc :: ExpId -> GHandler RoboSite RoboSite RepHtml
-getUpdateExpDesc eid = do
-    let mexp_label = Just . Params . T.pack $ "default"
-    (res, form, enctype) <- runFormGet $ expDescFormlet mexp_label
+getUpdateExpDesc eid = updateDesc eid Nothing
+
+updateDesc :: ExpId -> Maybe Plate -> GHandler RoboSite RoboSite RepHtml
+updateDesc eid mp = do
+    let m_label = Just . Params . T.pack $ "default"
+    (res, form, enctype) <- runFormGet $ descFormlet m_label
     output <-
         case res of
-            FormMissing -> return . T.pack $ "Enter new experiment label"
+            FormMissing -> return . T.pack $ "Enter new label"
             FormFailure _ -> return . T.pack $ "Please correct the errors below."
             FormSuccess (Params label) -> do
-                liftIO . updateExpLabel eid . T.unpack $ label
+                if isJust mp
+                    then
+                        liftIO . updatePlateLabel eid (read . fromJust $ mp) . T.unpack $ label
+                    else
+                        liftIO . updateExpLabel eid . T.unpack $ label
                 return . T.pack $ "Label updated"
     defaultLayout [$hamlet|
-<p>Enter new experiment label
+<p>Enter new label
 <form enctype="#{enctype}">
     <table>
         ^{form}
@@ -210,6 +239,9 @@ getHomeR = do
                                     Plate #{fst plate}: #{desc}
                                 $nothing
                                     Plate #{fst plate}
+                            \ #
+                            <a href=@{UpdatePlateDesc (fst exp) (fst plate)}>
+                                [Update label]
                             <div ##{fst exp}#{fst plate} style="display: none;">
                                 <ul>
                                     <li>
