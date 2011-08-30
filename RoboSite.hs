@@ -26,6 +26,7 @@ maxVal = 70000
 
 class DbReadable a where
     dbRead :: [SqlValue] -> a
+
 instance DbReadable Measurement where
     dbRead [SqlByteString exp_id, SqlInt32 plate_num, SqlByteString mt, SqlInt32 row, SqlInt32 col, SqlInt32 timestamp, v] =
         Measurement {
@@ -45,8 +46,6 @@ instance DbReadable Measurement where
 data GraphDesc = GraphDesc {gdExp :: ExpId, gdPlate :: Plate, gdMesType :: MType, gdExpDesc :: Maybe String, gdPlateDesc :: Maybe String} deriving (Show)
 
 data ExpDesc = ExpDesc {edExp :: ExpId, edDesc :: String} deriving (Show)
-data PlateDesc = PlateDesc {pdExp :: ExpId, pdPlate :: Int, pdDesc :: String} deriving (Show)
-
 instance DbReadable ExpDesc where
     dbRead [SqlByteString exp_id, SqlByteString desc] = 
         ExpDesc {
@@ -54,6 +53,7 @@ instance DbReadable ExpDesc where
             edDesc = toString desc
         }
 
+data PlateDesc = PlateDesc {pdExp :: ExpId, pdPlate :: Int, pdDesc :: String} deriving (Show)
 instance DbReadable PlateDesc where
     dbRead [SqlByteString exp_id, SqlInt32 p, SqlByteString desc] = 
         PlateDesc {
@@ -82,7 +82,7 @@ loadExpDataDB :: ExpId -> Int -> IO ExpData
 loadExpDataDB exp_id p = do
     conn <- connectMySQL $ MySQLConnectInfo hostName userName password dbName port unixSocket
     sql_vals <- quickQuery conn "SELECT * from tecan_readings where exp_id = ? AND plate = ?" [toSql exp_id, toSql p]
-    return . createExpData . filter ((==) p . mPlate) . map dbRead $ sql_vals
+    return . createExpData . map dbRead $ sql_vals
 
 loadExps :: IO [GraphDesc]
 loadExps = do
