@@ -2,7 +2,9 @@ module RoboDB (
     DbReadable(..),
     ExpDesc(..),
     PlateDesc(..),
+    DbMeasurement(..),
     WellDesc(..),
+    SelectCriteria(..),
     readTable,
     dbConnectInfo
     )
@@ -11,8 +13,9 @@ import Database.HDBC.MySQL
 import Database.HDBC
 import Data.ByteString.UTF8 (toString)
 import Data.Function (on)
-import Data.DateTime (fromSeconds)
-import RoboLib (ExpId, Well(..), wellFromInts, Measurement(..))
+import Data.Maybe (fromMaybe)
+import Data.DateTime (fromSeconds, DateTime)
+import RoboLib (ExpId, Well(..), wellFromInts, Measurement(..), MType)
 
 dbConnectInfo = MySQLConnectInfo {
     mysqlHost = "132.77.80.238",
@@ -25,10 +28,14 @@ dbConnectInfo = MySQLConnectInfo {
 
 maxVal = 70000
 
+data SelectCriteria = SelectCriteria {scWhere :: String, scVals :: [SqlValue]}
+    deriving (Show)
+
 class DbReadable a where
     dbRead :: [SqlValue] -> a
 
 data ExpDesc = ExpDesc {edExp :: ExpId, edDesc :: String} deriving (Show)
+
 instance DbReadable ExpDesc where
     dbRead [SqlByteString exp_id, SqlByteString desc] = 
         ExpDesc {
@@ -37,6 +44,7 @@ instance DbReadable ExpDesc where
         }
 
 data WellDesc = WellDesc {wdExp :: ExpId, wdPlate :: Int, wdWell :: Well, wdDesc :: String} deriving (Show)
+
 instance DbReadable WellDesc where
     dbRead [SqlByteString exp_id, SqlInt32 p, SqlInt32 row, SqlInt32 col, SqlByteString desc] = 
         WellDesc {
@@ -47,6 +55,7 @@ instance DbReadable WellDesc where
         }
 
 data PlateDesc = PlateDesc {pdExp :: ExpId, pdPlate :: Int, pdDesc :: String} deriving (Show)
+
 instance DbReadable PlateDesc where
     dbRead [SqlByteString exp_id, SqlInt32 p, SqlByteString desc] = 
         PlateDesc {
@@ -55,24 +64,28 @@ instance DbReadable PlateDesc where
             pdDesc = toString desc
         }
 
-readTable :: (DbReadable a) => String -> IO [a]
-readTable t_name = do
-    conn <- connectMySQL dbConnectInfo
-    entries <-  quickQuery' conn ("SELECT * FROM " ++ t_name) []
-    return . map dbRead $ entries
+data DbMeasurement = DbMeasurement { dbmExpDesc :: ExpId, dbmPlate :: Int, dbmTime :: DateTime, dbmType :: MType, dbmWell :: Well, dbmVal :: Double } deriving (Eq, Show)
 
-instance DbReadable Measurement where
+instance DbReadable DbMeasurement where
     dbRead [SqlByteString exp_id, SqlInt32 plate_num, SqlByteString mt, SqlInt32 row, SqlInt32 col, SqlInt32 timestamp, v] =
-        Measurement {
-            mExpDesc = toString exp_id,
-            mPlate = fromIntegral plate_num,
-            mTime = fromSeconds . fromIntegral $ timestamp,
-            mType = toString mt,
-            mWell = well,
-            mLabel = concat ["(", [wRow well],",",show . wColumn $ well,")"], 
-            mVal = val v
+        DbMeasurement {
+            dbmExpDesc = toString exp_id,
+            dbmPlate = fromIntegral plate_num,
+            dbmTime = fromSeconds . fromIntegral $ timestamp,
+            dbmType = toString mt,
+            dbmWell = well,
+            dbmVal = val v
             }
                 where
                     val (SqlDouble x) = if x == 0 then maxVal else x
                     val SqlNull = maxVal
                     well = (wellFromInts `on` fromIntegral) row col
+
+readTable :: (DbReadable a) => String -> Maybe SelectCriteria -> IO [a]
+readTable t_name msc = do
+    conn <- connectMySQL dbConnectInfo
+    let where_clause = fromMaybe "" . fmap scWhere $ msc
+    let where_params = fromMaybe [] . fmap scVals $ msc
+    entries <-  quickQuery' conn ("SELECT * FROM " ++ t_name ++ " " ++ where_clause) where_params
+    return . map dbRead $ entries
+

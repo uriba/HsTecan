@@ -6,10 +6,10 @@ import Database.HDBC
 import Data.ByteString.UTF8 (toString)
 import Data.Function (on)
 import Data.List (nub, find, sort)
-import Data.Maybe (isJust, fromJust)
+import Data.Maybe (isJust, fromJust, fromMaybe)
 import System.FilePath (makeValid, (<.>))
 import Math.Combinatorics.Graph (combinationsOf)
-import RoboDB (ExpDesc(..), PlateDesc(..), WellDesc(..), readTable, DbReadable(..), dbConnectInfo)
+import RoboDB (ExpDesc(..), PlateDesc(..), WellDesc(..), DbMeasurement (..), readTable, DbReadable(..), dbConnectInfo, SelectCriteria(..))
 import RoboLib (Measurement(..), Well(..), wellFromInts, createExpData, ExpData, plotData, mesData, expMesTypes, ExpId, MType, mesToOdData, plotIntensityGrid, smoothAll, bFiltS)
 import qualified Data.Text as T
 import qualified Data.Map as M
@@ -27,18 +27,32 @@ dbToGraphDesc exp_descs plate_descs [SqlByteString exp_id, SqlInt32 p, SqlByteSt
     gdPlateDesc = fmap pdDesc . find (\x -> pdExp x == toString exp_id && pdPlate x == fromIntegral p) $ plate_descs
     }
 
+mesFromDB :: [WellDesc] -> [DbMeasurement] -> [Measurement]
+mesFromDB wds dbms = [ to_mes m | m <- dbms]
+    where
+        to_mes m = Measurement {
+		    mExpDesc = dbmExpDesc m,
+		    mPlate = dbmPlate m,
+		    mType = dbmType m,
+		    mTime = dbmTime m,
+		    mWell = dbmWell m,
+		    mLabel = fromMaybe (wellstr $ dbmWell m) . fmap wdDesc . find ((==) (dbmWell m) . wdWell) $ wds,
+		    mVal = dbmVal m
+        }
+        wellstr w = concat ["(", [wRow w],",",show . wColumn $ w,")"]
+
 loadExpDataDB :: ExpId -> Int -> IO ExpData
 loadExpDataDB exp_id p = do
-    conn <- connectMySQL dbConnectInfo
-    sql_vals <- quickQuery conn "SELECT * from tecan_readings where exp_id = ? AND plate = ?" [toSql exp_id, toSql p]
-    return . createExpData . map dbRead $ sql_vals
+    readings <- readTable "tecan_readings" (Just $ SelectCriteria "where exp_id = ? AND plate = ?" [toSql exp_id, toSql p])
+    well_labels <- readTable "tecan_labels" (Just $ SelectCriteria "where exp_id = ? AND plate = ?" [toSql exp_id, toSql p])
+    return . createExpData . mesFromDB well_labels $ readings
 
 loadExps :: IO [GraphDesc]
 loadExps = do
     conn <- connectMySQL dbConnectInfo
     sql_vals <- quickQuery' conn "SELECT DISTINCT exp_id,plate,reading_label FROM tecan_readings" []
-    exp_descs <- readTable "tecan_experiments"
-    plate_descs <- readTable "tecan_plates"
+    exp_descs <- readTable "tecan_experiments" Nothing
+    plate_descs <- readTable "tecan_plates" Nothing
     return . map (dbToGraphDesc exp_descs plate_descs) $ sql_vals
 
 data RoboSite = RoboSite
