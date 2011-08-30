@@ -4,69 +4,18 @@ import Yesod.Helpers.Static
 import Database.HDBC.MySQL
 import Database.HDBC
 import Data.ByteString.UTF8 (toString)
-import Data.DateTime (fromSeconds)
 import Data.Function (on)
 import Data.List (nub, find, sort)
 import Data.Maybe (isJust, fromJust)
 import System.FilePath (makeValid, (<.>))
 import Math.Combinatorics.Graph (combinationsOf)
+import RoboDB (ExpDesc(..), PlateDesc(..), WellDesc(..), readTable, DbReadable(..), dbConnectInfo)
 import RoboLib (Measurement(..), Well(..), wellFromInts, createExpData, ExpData, plotData, mesData, expMesTypes, ExpId, MType, mesToOdData, plotIntensityGrid, smoothAll, bFiltS)
 import qualified Data.Text as T
 import qualified Data.Map as M
 import Control.Applicative ((<$>))
 
-hostName = "132.77.80.238"
-userName = "ronm"
-password = "a1a1a1"
-dbName = "tecan"
-port = 3306
-unixSocket = "/tmp/mysql.sock"
-
-maxVal = 70000
-
-class DbReadable a where
-    dbRead :: [SqlValue] -> a
-
-instance DbReadable Measurement where
-    dbRead [SqlByteString exp_id, SqlInt32 plate_num, SqlByteString mt, SqlInt32 row, SqlInt32 col, SqlInt32 timestamp, v] =
-        Measurement {
-            mExpDesc = toString exp_id,
-            mPlate = fromIntegral plate_num,
-            mTime = fromSeconds . fromIntegral $ timestamp,
-            mType = toString mt,
-            mWell = well,
-            mLabel = concat ["(", [wRow well],",",show . wColumn $ well,")"], 
-            mVal = val v
-            }
-                where
-                    val (SqlDouble x) = if x == 0 then maxVal else x
-                    val SqlNull = maxVal
-                    well = (wellFromInts `on` fromIntegral) row col
-
 data GraphDesc = GraphDesc {gdExp :: ExpId, gdPlate :: Plate, gdMesType :: MType, gdExpDesc :: Maybe String, gdPlateDesc :: Maybe String} deriving (Show)
-
-data ExpDesc = ExpDesc {edExp :: ExpId, edDesc :: String} deriving (Show)
-instance DbReadable ExpDesc where
-    dbRead [SqlByteString exp_id, SqlByteString desc] = 
-        ExpDesc {
-            edExp = toString exp_id,
-            edDesc = toString desc
-        }
-
-data PlateDesc = PlateDesc {pdExp :: ExpId, pdPlate :: Int, pdDesc :: String} deriving (Show)
-instance DbReadable PlateDesc where
-    dbRead [SqlByteString exp_id, SqlInt32 p, SqlByteString desc] = 
-        PlateDesc {
-            pdExp = toString exp_id,
-            pdPlate = fromIntegral p,
-            pdDesc = toString desc
-        }
-
-readTable :: (DbReadable a) => String -> IO [a]
-readTable t_name = do
-    conn <- connectMySQL $ MySQLConnectInfo hostName userName password dbName port unixSocket
-    entries <-  quickQuery' conn ("SELECT * FROM " ++ t_name) []
-    return . map dbRead $ entries
 
 dbToGraphDesc :: [ExpDesc] -> [PlateDesc] -> [SqlValue] -> GraphDesc
 dbToGraphDesc exp_descs plate_descs [SqlByteString exp_id, SqlInt32 p, SqlByteString mt] =
@@ -80,13 +29,13 @@ dbToGraphDesc exp_descs plate_descs [SqlByteString exp_id, SqlInt32 p, SqlByteSt
 
 loadExpDataDB :: ExpId -> Int -> IO ExpData
 loadExpDataDB exp_id p = do
-    conn <- connectMySQL $ MySQLConnectInfo hostName userName password dbName port unixSocket
+    conn <- connectMySQL dbConnectInfo
     sql_vals <- quickQuery conn "SELECT * from tecan_readings where exp_id = ? AND plate = ?" [toSql exp_id, toSql p]
     return . createExpData . map dbRead $ sql_vals
 
 loadExps :: IO [GraphDesc]
 loadExps = do
-    conn <- connectMySQL $ MySQLConnectInfo hostName userName password dbName port unixSocket
+    conn <- connectMySQL dbConnectInfo
     sql_vals <- quickQuery' conn "SELECT DISTINCT exp_id,plate,reading_label FROM tecan_readings" []
     exp_descs <- readTable "tecan_experiments"
     plate_descs <- readTable "tecan_plates"
@@ -156,13 +105,13 @@ getReadGraph exp plate graph = do
 
 updatePlateLabel :: ExpId -> Int -> String -> IO ()
 updatePlateLabel eid p l = do
-    conn <- connectMySQL $ MySQLConnectInfo hostName userName password dbName port unixSocket
+    conn <- connectMySQL dbConnectInfo
     _ <- run conn "INSERT INTO tecan_plates (exp_id,plate,description) VALUES (?,?,?) ON DUPLICATE KEY UPDATE description = ?" [toSql eid, toSql p, toSql l, toSql l]
     return ()
 
 updateExpLabel :: ExpId -> String -> IO ()
 updateExpLabel eid l = do
-    conn <- connectMySQL $ MySQLConnectInfo hostName userName password dbName port unixSocket
+    conn <- connectMySQL dbConnectInfo
     _ <- run conn "INSERT INTO tecan_experiments (exp_id,description) VALUES (?,?) ON DUPLICATE KEY UPDATE description = ?" [toSql eid, toSql l, toSql l]
     return ()
 
