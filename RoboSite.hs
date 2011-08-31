@@ -10,7 +10,7 @@ import Data.Maybe (isJust, fromJust, fromMaybe)
 import System.FilePath (makeValid, (<.>))
 import Math.Combinatorics.Graph (combinationsOf)
 import RoboDB (ExpDesc(..), PlateDesc(..), WellDesc(..), DbMeasurement (..), readTable, DbReadable(..), dbConnectInfo, SelectCriteria(..))
-import RoboLib (Measurement(..), Well(..), wellFromInts, createExpData, ExpData, plotData, mesData, expMesTypes, ExpId, MType, mesToOdData, plotIntensityGrid, smoothAll, bFiltS, intensityGridData, plotGridDataToStrings, plotLinesDataToStrings)
+import RoboLib (Measurement(..), Well(..), wellFromInts, createExpData, ExpData, plotData, mesData, expMesTypes, ExpId, MType, mesToOdData, plotIntensityGrid, smoothAll, bFiltS, intensityGridData, plotGridDataToStrings, plotLinesDataToStrings, Label, PlotGridData)
 import qualified Data.Text as T
 import qualified Data.Map as M
 import Control.Applicative ((<$>))
@@ -21,9 +21,9 @@ data GraphDesc = GraphDesc {gdExp :: ExpId, gdPlate :: Plate, gdMesType :: MType
 dbToGraphDesc :: [ExpDesc] -> [PlateDesc] -> [SqlValue] -> GraphDesc
 dbToGraphDesc exp_descs plate_descs [SqlByteString exp_id, SqlInt32 p, SqlByteString mt] =
     GraphDesc {
-	gdExp = toString exp_id,
-	gdPlate = show p,
-	gdMesType = toString mt,
+    gdExp = toString exp_id,
+    gdPlate = show p,
+    gdMesType = toString mt,
     gdExpDesc = fmap edDesc . find (\x -> edExp x == toString exp_id) $ exp_descs,
     gdPlateDesc = fmap pdDesc . find (\x -> pdExp x == toString exp_id && pdPlate x == fromIntegral p) $ plate_descs
     }
@@ -32,13 +32,13 @@ mesFromDB :: [WellDesc] -> [DbMeasurement] -> [Measurement]
 mesFromDB wds dbms = [ to_mes m | m <- dbms]
     where
         to_mes m = Measurement {
-		    mExpDesc = dbmExpDesc m,
-		    mPlate = dbmPlate m,
-		    mType = dbmType m,
-		    mTime = dbmTime m,
-		    mWell = dbmWell m,
-		    mLabel = fromMaybe (wellstr $ dbmWell m) . fmap wdDesc . find ((==) (dbmWell m) . wdWell) $ wds,
-		    mVal = dbmVal m
+            mExpDesc = dbmExpDesc m,
+            mPlate = dbmPlate m,
+            mType = dbmType m,
+            mTime = dbmTime m,
+            mWell = dbmWell m,
+            mLabel = fromMaybe (wellstr $ dbmWell m) . fmap wdDesc . find ((==) (dbmWell m) . wdWell) $ wds,
+            mVal = dbmVal m
         }
         wellstr w = concat ["(", [wRow w],",",show . wColumn $ w,")"]
 
@@ -81,14 +81,14 @@ pngFileName fn = fn ++ ".png"
 plotMesApp :: ExpData -> FilePath -> String -> IO ()
 plotMesApp ed fn t = do
     let pd = mesData ed t
-    let	ofn = pngFileName fn
+    let ofn = pngFileName fn
     plotData t pd (Just ofn)
 
 plotMesToODApp :: ExpData -> FilePath -> String -> IO ()
 plotMesToODApp ed fn t = do
     let sms = smoothAll bFiltS ed
     let pd = mesToOdData sms t Nothing
-    let	ofn = pngFileName fn
+    let ofn = pngFileName fn
     plotData t pd (Just ofn)
 
 plotGridApp :: ExpData -> (String,String) -> FilePath -> IO ()
@@ -102,8 +102,96 @@ getGridGraphData exp plate x y = do
     exp_data <- liftIO $ loadExpDataDB exp (read plate)
     let sms = smoothAll bFiltS exp_data
     let igd = intensityGridData sms (x,y) (logBase 10, logBase 10)
-    let bytes = genCsvFile . plotGridDataToStrings $ igd
-    sendResponse (typePlain, toContent bytes)
+    let labels_and_data = concatMap labels_desc . M.toList $ igd
+    defaultLayout $ do
+        setTitle "Robosite graph"
+        addJulius [$julius|
+        <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.6.1/jquery.min.js"> 
+        <script type="text/javascript" src="/js/highcharts.js"></script> 
+        
+        <!-- 2. Add the JavaScript to initialize the chart on document ready --> 
+        <script type="text/javascript"> 
+            var chart;
+            $(document).ready(function() {
+                chart = new Highcharts.Chart({
+                    chart: {
+                        renderTo: 'container', 
+                        defaultSeriesType: 'scatter',
+                        zoomType: 'xy'
+                    },
+                    title: {
+                        text: 'Log scale expression level grid'
+                    },
+                    subtitle: {
+                        text: 'Using Highcharts'
+                    },
+                    xAxis: {
+                        title: {
+                            enabled: true,
+                            text: '#{x}'
+                        },
+                        startOnTick: true,
+                        endOnTick: true,
+                        showLastLabel: true
+                    },
+                    yAxis: {
+                        title: {
+                            text: '#{y}'
+                        }
+                    },
+                    tooltip: {
+                        formatter: function() {
+                                return ''+
+                                this.x +' #{x}, '+ this.y +' #{y}';
+                        }
+                    },
+                    legend: {
+                        layout: 'vertical',
+                        align: 'left',
+                        verticalAlign: 'top',
+                        x: 100,
+                        y: 70,
+                        floating: true,
+                        backgroundColor: '#FFFFFF',
+                        borderWidth: 1
+                    },
+                    plotOptions: {
+                        scatter: {
+                            marker: {
+                                radius: 5,
+                                states: {
+                                    hover: {
+                                        enabled: true,
+                                        lineColor: 'rgb(100,100,100)'
+                                    }
+                                }
+                            },
+                            states: {
+                                hover: {
+                                    marker: {
+                                        enabled: false
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    series: [
+                        #{labels_and_data}
+                    ]
+                });
+            });
+|]
+
+        addHamlet [$hamlet|
+<h1> Grid graph!
+<div #container style="width: 800px; height: 400px; margin: 0 auto">
+|]
+
+        where
+            labels_desc (label,vals_map) = "{ name:" ++ label ++ "data: " ++ points vals_map ++ "},"
+            points vm = show . map (\(x,y) -> [x,y]) . M.elems $ vm
+    --let bytes = genCsvFile . plotGridDataToStrings $ igd
+    --sendResponse (typePlain, toContent bytes)
 
 getGridGraph :: ExpId -> Plate -> GraphType -> GraphType -> GHandler RoboSite RoboSite RepHtml
 getGridGraph exp plate x y = do

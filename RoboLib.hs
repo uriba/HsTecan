@@ -25,6 +25,7 @@ module RoboLib (
     smoothAll,
     bFiltS,
     has,
+    Label,
     )
 where
 import Graphics.Gnuplot.Simple
