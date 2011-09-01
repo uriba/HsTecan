@@ -6,10 +6,11 @@ import Data.ByteString.UTF8 (toString)
 import Data.Function (on)
 import Data.List (nub, find, sort)
 import Data.Maybe (isJust, fromJust, fromMaybe)
+import Data.DateTime (toSeconds)
 import System.FilePath (makeValid, (<.>))
 import Math.Combinatorics.Graph (combinationsOf)
 import RoboDB (ExpDesc(..), PlateDesc(..), WellDesc(..), DbMeasurement (..), readTable, DbReadable(..), dbConnectInfo, SelectCriteria(..))
-import RoboLib (Measurement(..), Well(..), wellFromInts, createExpData, ExpData, plotData, mesData, expMesTypes, ExpId, MType, mesToOdData, plotIntensityGrid, smoothAll, bFiltS, intensityGridData, plotGridDataToStrings, plotLinesDataToStrings, Label, PlotGridData)
+import RoboLib (Measurement(..), Well(..), wellFromInts, createExpData, ExpData, plotData, mesData, mesDataTime, expMesTypes, ExpId, MType, mesToOdData, plotIntensityGrid, smoothAll, bFiltS, intensityGridData, plotGridDataToStrings, plotLinesDataToStrings, Label, PlotGridData, ColonyId(..))
 import qualified Data.Text as T
 import qualified Data.Map as M
 import Control.Applicative ((<$>))
@@ -36,10 +37,12 @@ mesFromDB wds dbms = [ to_mes m | m <- dbms]
             mType = dbmType m,
             mTime = dbmTime m,
             mWell = dbmWell m,
-            mLabel = fromMaybe (wellstr $ dbmWell m) . fmap wdDesc . find ((==) (dbmWell m) . wdWell) $ wds,
+            mLabel = fromMaybe (wellStr $ dbmWell m) . fmap wdDesc . find ((==) (dbmWell m) . wdWell) $ wds,
             mVal = dbmVal m
         }
-        wellstr w = concat ["(", [wRow w],",",show . wColumn $ w,")"]
+
+wellStr :: Well -> String
+wellStr w = concat ["(", [wRow w],",",show . wColumn $ w,")"]
 
 loadExpDataDB :: ExpId -> Int -> IO ExpData
 loadExpDataDB exp_id p = do
@@ -76,12 +79,6 @@ instance Yesod RoboSite where
 
 pngFileName :: FilePath -> String
 pngFileName fn = fn ++ ".png"
-
-plotMesApp :: ExpData -> FilePath -> String -> IO ()
-plotMesApp ed fn t = do
-    let pd = mesData ed t
-    let ofn = pngFileName fn
-    plotData t pd (Just ofn)
 
 plotMesToODApp :: ExpData -> FilePath -> String -> IO ()
 plotMesToODApp ed fn t = do
@@ -144,7 +141,7 @@ getGridGraph exp plate x y = do
                     },
                     tooltip: {
                         formatter: function() {
-                                return ''+
+                                return '<b>'+ this.series.name + '</b><br/>' +
                                 this.x +' #{x}, '+ this.y +' #{y}';
                         }
                     },
@@ -217,13 +214,86 @@ getReadGraphData exp plate t = do
     let bytes = genCsvFile . plotLinesDataToStrings $ pd
     sendResponse (typePlain, toContent bytes)
 
-getReadGraph :: ExpId -> Plate -> GraphType -> GHandler RoboSite RoboSite RepHtml
-getReadGraph exp plate graph = do
+getReadGraph :: ExpId -> Plate -> MType -> GHandler RoboSite RoboSite RepHtml
+getReadGraph exp plate t = do
     exp_data <- liftIO $ loadExpDataDB exp (read plate)
-    let fn = makeValid (exp <.> graph <.> plate)
-    liftIO $ putStrLn ("generating: " ++ pngFileName fn)
-    liftIO $ plotMesApp exp_data fn graph
-    sendFile typePng $ pngFileName fn
+    let pd = mesDataTime exp_data t
+    let labels_and_lines = concatMap labels_lines . M.toList $ pd
+    defaultLayout $ do
+        setTitle "Robosite graph"
+        addJulius [$julius|
+        </script>
+        <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.6.1/jquery.min.js"></script>
+        <script type="text/javascript" src="/js/highcharts.js"></script> 
+        <script type="text/javascript" src="/js/modules/exporting.js"></script> 
+        
+        <!-- 2. Add the JavaScript to initialize the chart on document ready --> 
+        <script type="text/javascript"> 
+            var chart;
+            $(document).ready(function() {
+                chart = new Highcharts.Chart({
+                    chart: {
+						renderTo: 'container',
+						defaultSeriesType: 'line',
+						marginRight: 130,
+						marginBottom: 25,
+                        zoomType: 'xy'
+					},
+					title: {
+						text: 'Measurement data of #{t}',
+						x: -20 //center
+					},
+					subtitle: {
+						text: 'Experiment: #{exp}, Plate: #{plate}',
+						x: -20
+					},
+					xAxis: {
+                        type: 'datetime',
+						title: {
+							text: 'Time'
+						},
+					},
+					yAxis: {
+						title: {
+							text: '#{t}'
+						},
+						plotLines: [{
+							value: 0,
+							width: 1,
+							color: '#808080'
+						}]
+					},
+					tooltip: {
+						formatter: function() {
+				                return '<b>'+ this.series.name +'</b><br/>'+
+								this.x +': '+ this.y;
+						}
+					},
+					legend: {
+						layout: 'vertical',
+						align: 'right',
+						verticalAlign: 'top',
+						x: -10,
+						y: 100,
+						borderWidth: 0
+					},
+					series: [
+#{labels_and_lines}
+					]
+				});
+				
+				
+			});
+|]
+        addHamlet [$hamlet|
+<h1> Read data graph
+<div #container style="width: 800px; height: 800px; margin: 0 auto">
+|]
+
+        where
+            labels_lines (label,vals_map) = concatMap (lines_for_label label) . M.toList $ vals_map
+            lines_for_label l (n,v) = "{ name:'" ++ l ++ " - " ++ (wellStr . cWell $ n) ++ "', data: " ++ (show . points_with_time $ v) ++ "},"
+            points_with_time = map (\(x,y) -> [x,fromIntegral $ toSeconds y * 1000])
 
 updatePlateLabel :: ExpId -> Int -> String -> IO ()
 updatePlateLabel eid p l = do

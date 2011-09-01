@@ -1,5 +1,6 @@
 module RoboLib (
     Well (..),
+    ColonyId (..),
     wellFromInts,
     Measurement (..),
     plotIntensityGrid,
@@ -8,6 +9,7 @@ module RoboLib (
     plotData,
     plotGrid,
     mesData,
+    mesDataTime,
     mesToOdData,
     intensityGridData,
     plotGridDataToStrings,
@@ -189,10 +191,13 @@ verifySingleColony ms
     | otherwise = ms
 
 liveWell :: [Measurement] -> Bool -- returns whether measurements taken from a given well indicate that it grew.
-liveWell ms = (last . mesByTime "OD600" $ ms) > odLiveThreshold
+liveWell ms = (last . valByTime "OD600" $ ms) > odLiveThreshold
 
-mesByTime :: MType -> [Measurement] -> [Double]
-mesByTime mt = map mVal . sortBy (compare `on` mTime) . filterByType mt . verifySingleColony
+mesByTime :: MType -> [Measurement] -> [Measurement]
+mesByTime mt = sortBy (compare `on` mTime) . filterByType mt . verifySingleColony
+
+valByTime :: MType -> [Measurement] -> [Double]
+valByTime mt = map mVal . mesByTime mt
 
 makePlotData :: (String, [[Double]]) -> Int -> [(PlotStyle, [Double])]
 makePlotData (desc, vals) c = [ (defaultStyle {lineSpec = CustomStyle [LineTitle desc, LineType c]},x) | x <- vals ]
@@ -211,8 +216,11 @@ plotData title pld m_fn = do
     let fileoptions = fromMaybe [] . fmap fileOpts $ m_fn
     plotListsStyle ([Title title] ++ fileoptions) plot_data
 
+mesDataTime :: ExpData -> MType -> M.Map Label (M.Map ColonyId [(Double,DateTime)])
+mesDataTime ed mt = M.map (M.map (map (\x -> (mVal x, mTime x)) . mesByTime mt)) ed
+
 mesData :: ExpData -> MType -> PlotLinesData
-mesData ed mt = M.map (M.map (mesByTime mt)) ed
+mesData ed mt = M.map (M.map (valByTime mt)) ed
 
 plotMesData :: ExpData -> MType -> Maybe FilePath -> IO()
 plotMesData ed  mt m_fn = plotData mt (mesData ed mt) m_fn
@@ -221,7 +229,7 @@ mesToOd :: MType -> Maybe (Int,Int) -> [Measurement] -> [Double]
 mesToOd mt Nothing ms = mesToOd mt (Just . mesLimits mt $ ms) $ ms 
 mesToOd mt (Just (low,high)) ms = m_to_od_vals
     where
-	vals t = take (high - low) . drop low . mesByTime t
+	vals t = take (high - low) . drop low . valByTime t
 	diffs x = zipWith (-) (tail x) x
 	m_to_od_vals = zipWith (/) (diffs . vals mt $ ms) . vals "OD600" $ ms
 
@@ -251,8 +259,8 @@ odLimits ods = (low,high)
 mesLimits :: MType -> [Measurement] -> (Int,Int)
 mesLimits mt ms = (low,high)
     where
-	(low,high_od) = odLimits . mesByTime "OD600" $ ms
-	high = min high_od . fromMaybe (high_od) . findIndex (>= maxMes) . mesByTime mt $ ms
+	(low,high_od) = odLimits . valByTime "OD600" $ ms
+	high = min high_od . fromMaybe (high_od) . findIndex (>= maxMes) . valByTime mt $ ms
 
 expLevel :: MType -> [Measurement] -> Double
 expLevel mt = meanL . mesToOd mt Nothing
