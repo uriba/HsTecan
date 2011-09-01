@@ -1,6 +1,5 @@
 {-# LANGUAGE TypeFamilies, QuasiQuotes, MultiParamTypeClasses, TemplateHaskell, OverloadedStrings #-}
 import Yesod
-import Yesod.Helpers.Static
 import Database.HDBC.MySQL
 import Database.HDBC
 import Data.ByteString.UTF8 (toString)
@@ -91,14 +90,16 @@ plotMesToODApp ed fn t = do
     let ofn = pngFileName fn
     plotData t pd (Just ofn)
 
-plotGridApp :: ExpData -> (String,String) -> FilePath -> IO ()
-plotGridApp ed axes fn = do
-    let ofn = pngFileName fn
-    let sms = smoothAll bFiltS ed
-    plotIntensityGrid sms axes (logBase 10, logBase 10) (Just ofn)
-
 getGridGraphData :: ExpId -> Plate -> MType -> MType -> GHandler RoboSite RoboSite RepHtml
 getGridGraphData exp plate x y = do
+    exp_data <- liftIO $ loadExpDataDB exp (read plate)
+    let sms = smoothAll bFiltS exp_data
+    let igd = intensityGridData sms (x,y) (logBase 10, logBase 10)
+    let bytes = genCsvFile . plotGridDataToStrings $ igd
+    sendResponse (typePlain, toContent bytes)
+
+getGridGraph :: ExpId -> Plate -> MType -> MType -> GHandler RoboSite RoboSite RepHtml
+getGridGraph exp plate x y = do
     exp_data <- liftIO $ loadExpDataDB exp (read plate)
     let sms = smoothAll bFiltS exp_data
     let igd = intensityGridData sms (x,y) (logBase 10, logBase 10)
@@ -106,8 +107,10 @@ getGridGraphData exp plate x y = do
     defaultLayout $ do
         setTitle "Robosite graph"
         addJulius [$julius|
-        <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.6.1/jquery.min.js"> 
+        </script>
+        <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.6.1/jquery.min.js"></script>
         <script type="text/javascript" src="/js/highcharts.js"></script> 
+        <script type="text/javascript" src="/js/modules/exporting.js"></script> 
         
         <!-- 2. Add the JavaScript to initialize the chart on document ready --> 
         <script type="text/javascript"> 
@@ -183,23 +186,13 @@ getGridGraphData exp plate x y = do
 |]
 
         addHamlet [$hamlet|
-<h1> Grid graph!
-<div #container style="width: 800px; height: 400px; margin: 0 auto">
+<h1> Grid graph
+<div #container style="width: 800px; height: 800px; margin: 0 auto">
 |]
 
         where
-            labels_desc (label,vals_map) = "{ name:" ++ label ++ "data: " ++ points vals_map ++ "},"
+            labels_desc (label,vals_map) = "{ name:'" ++ label ++ "', data: " ++ points vals_map ++ "},"
             points vm = show . map (\(x,y) -> [x,y]) . M.elems $ vm
-    --let bytes = genCsvFile . plotGridDataToStrings $ igd
-    --sendResponse (typePlain, toContent bytes)
-
-getGridGraph :: ExpId -> Plate -> GraphType -> GraphType -> GHandler RoboSite RoboSite RepHtml
-getGridGraph exp plate x y = do
-    exp_data <- liftIO $ loadExpDataDB exp (read plate)
-    let fn = makeValid (exp <.> plate <.> x <.> y <.> "grid")
-    liftIO $ putStrLn ("generating: " ++ pngFileName fn)
-    liftIO $ plotGridApp exp_data (x,y) fn
-    sendFile typePng $ pngFileName fn
 
 getExpLevelData :: ExpId -> Plate -> MType -> GHandler RoboSite RoboSite RepHtml
 getExpLevelData exp plate t = do
