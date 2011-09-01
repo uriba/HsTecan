@@ -293,7 +293,7 @@ getReadGraph exp plate t = do
         where
             labels_lines (label,vals_map) = concatMap (lines_for_label label) . M.toList $ vals_map
             lines_for_label l (n,v) = "{ name:'" ++ l ++ " - " ++ (wellStr . cWell $ n) ++ "', data: " ++ (show . points_with_time $ v) ++ "},"
-            points_with_time = map (\(x,y) -> [x,fromIntegral $ toSeconds y * 1000])
+            points_with_time = map (\(x,y) -> [fromIntegral $ toSeconds y * 1000,x])
 
 updatePlateLabel :: ExpId -> Int -> String -> IO ()
 updatePlateLabel eid p l = do
