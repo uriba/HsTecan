@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeFamilies, QuasiQuotes, MultiParamTypeClasses, TemplateHaskell, OverloadedStrings #-}
+{-# LANGUAGE TypeFamilies, QuasiQuotes, MultiParamTypeClasses, TemplateHaskell, OverloadedStrings, TypeSynonymInstances, OverlappingInstances #-}
 import Yesod
 import Database.HDBC.MySQL
 import Database.HDBC
@@ -6,13 +6,14 @@ import Data.ByteString.UTF8 (toString)
 import Data.Function (on)
 import Data.List (nub, find, sort)
 import Data.Maybe (isJust, fromJust, fromMaybe)
-import Data.DateTime (toSeconds)
+import Data.DateTime (toSeconds, DateTime)
 import System.FilePath (makeValid, (<.>))
 import Math.Combinatorics.Graph (combinationsOf)
 import RoboDB (ExpDesc(..), PlateDesc(..), WellDesc(..), DbMeasurement (..), readTable, DbReadable(..), dbConnectInfo, SelectCriteria(..))
 import RoboLib (Measurement(..), Well(..), wellFromInts, createExpData, ExpData, plotData, mesData, mesDataTime, expMesTypes, ExpId, MType, mesToOdData, plotIntensityGrid, smoothAll, bFiltS, intensityGridData, plotGridDataToStrings, plotLinesDataToStrings, Label, PlotGridData, ColonyId(..))
 import qualified Data.Text as T
 import qualified Data.Map as M
+import qualified Text.JSON as J
 import Control.Applicative ((<$>))
 import Data.CSV (genCsvFile)
 
@@ -100,9 +101,11 @@ getGridGraph exp plate x y = do
     exp_data <- liftIO $ loadExpDataDB exp (read plate)
     let sms = smoothAll bFiltS exp_data
     let igd = intensityGridData sms (x,y) (logBase 10, logBase 10)
-    let labels_and_data = concatMap labels_desc . M.toList $ igd
+    let title = "Grid data of (" ++ x ++ ", " ++ y ++ ")"
+    let subtitle = "Experiment: " ++ exp ++ ", Plate: " ++ plate
+    let json_data = J.encode . J.makeObj $ gridChartSeries igd ++ gridPlottingSettings ++ gridGraphTitles title subtitle x y
     defaultLayout $ do
-        setTitle "Robosite graph"
+        setTitle "Grid graph"
         addJulius [$julius|
         </script>
         <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.6.1/jquery.min.js"></script>
@@ -113,72 +116,7 @@ getGridGraph exp plate x y = do
         <script type="text/javascript"> 
             var chart;
             $(document).ready(function() {
-                chart = new Highcharts.Chart({
-                    chart: {
-                        renderTo: 'container', 
-                        defaultSeriesType: 'scatter',
-                        zoomType: 'xy'
-                    },
-                    title: {
-                        text: 'Log scale expression level grid'
-                    },
-                    subtitle: {
-                        text: 'Using Highcharts'
-                    },
-                    xAxis: {
-                        title: {
-                            enabled: true,
-                            text: '#{x}'
-                        },
-                        startOnTick: true,
-                        endOnTick: true,
-                        showLastLabel: true
-                    },
-                    yAxis: {
-                        title: {
-                            text: '#{y}'
-                        }
-                    },
-                    tooltip: {
-                        formatter: function() {
-                                return '<b>'+ this.series.name + '</b><br/>' +
-                                this.x +' #{x}, '+ this.y +' #{y}';
-                        }
-                    },
-                    legend: {
-                        layout: 'vertical',
-                        align: 'left',
-                        verticalAlign: 'top',
-                        x: 100,
-                        y: 70,
-                        floating: true,
-                        backgroundColor: '#FFFFFF',
-                        borderWidth: 1
-                    },
-                    plotOptions: {
-                        scatter: {
-                            marker: {
-                                radius: 5,
-                                states: {
-                                    hover: {
-                                        enabled: true,
-                                        lineColor: 'rgb(100,100,100)'
-                                    }
-                                }
-                            },
-                            states: {
-                                hover: {
-                                    marker: {
-                                        enabled: false
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    series: [
-                        #{labels_and_data}
-                    ]
-                });
+                chart = new Highcharts.Chart(#{json_data});
             });
 |]
 
@@ -186,10 +124,6 @@ getGridGraph exp plate x y = do
 <h1> Grid graph
 <div #container style="width: 800px; height: 800px; margin: 0 auto">
 |]
-
-        where
-            labels_desc (label,vals_map) = "{ name:'" ++ label ++ "', data: " ++ points vals_map ++ "},"
-            points vm = show . map (\(x,y) -> [x,y]) . M.elems $ vm
 
 getExpLevelData :: ExpId -> Plate -> MType -> GHandler RoboSite RoboSite RepHtml
 getExpLevelData exp plate t = do
@@ -218,9 +152,12 @@ getReadGraph :: ExpId -> Plate -> MType -> GHandler RoboSite RoboSite RepHtml
 getReadGraph exp plate t = do
     exp_data <- liftIO $ loadExpDataDB exp (read plate)
     let pd = mesDataTime exp_data t
-    let labels_and_lines = concatMap labels_lines . M.toList $ pd
+    let page_title = t ++ ", " ++ plate ++ " - " ++ exp
+    let title = "Measurement data of " ++ t
+    let subtitle = "Experiment: " ++ exp ++ ", Plate: " ++ plate
+    let json_data = J.encode . J.makeObj $ linesChartSeries pd ++ linePlottingSettings ++ timeWiseGraphTitles title subtitle t
     defaultLayout $ do
-        setTitle "Robosite graph"
+        setTitle "Raw measurement graph" -- replace to page_title
         addJulius [$julius|
         </script>
         <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.6.1/jquery.min.js"></script>
@@ -231,69 +168,13 @@ getReadGraph exp plate t = do
         <script type="text/javascript"> 
             var chart;
             $(document).ready(function() {
-                chart = new Highcharts.Chart({
-                    chart: {
-						renderTo: 'container',
-						defaultSeriesType: 'line',
-						marginRight: 130,
-						marginBottom: 25,
-                        zoomType: 'xy'
-					},
-					title: {
-						text: 'Measurement data of #{t}',
-						x: -20 //center
-					},
-					subtitle: {
-						text: 'Experiment: #{exp}, Plate: #{plate}',
-						x: -20
-					},
-					xAxis: {
-                        type: 'datetime',
-						title: {
-							text: 'Time'
-						},
-					},
-					yAxis: {
-						title: {
-							text: '#{t}'
-						},
-						plotLines: [{
-							value: 0,
-							width: 1,
-							color: '#808080'
-						}]
-					},
-					tooltip: {
-						formatter: function() {
-				                return '<b>'+ this.series.name +'</b><br/>'+
-								this.x +': '+ this.y;
-						}
-					},
-					legend: {
-						layout: 'vertical',
-						align: 'right',
-						verticalAlign: 'top',
-						x: -10,
-						y: 100,
-						borderWidth: 0
-					},
-					series: [
-#{labels_and_lines}
-					]
-				});
-				
-				
-			});
+                chart = new Highcharts.Chart(#{json_data});
+            });
 |]
         addHamlet [$hamlet|
 <h1> Read data graph
 <div #container style="width: 800px; height: 800px; margin: 0 auto">
 |]
-
-        where
-            labels_lines (label,vals_map) = concatMap (lines_for_label label) . M.toList $ vals_map
-            lines_for_label l (n,v) = "{ name:'" ++ l ++ " - " ++ (wellStr . cWell $ n) ++ "', data: " ++ (show . points_with_time $ v) ++ "},"
-            points_with_time = map (\(x,y) -> [fromIntegral $ toSeconds y * 1000,x])
 
 updatePlateLabel :: ExpId -> Int -> String -> IO ()
 updatePlateLabel eid p l = do
@@ -435,4 +316,136 @@ function toggleDisplay(element_name) {
 }
 |]
 
-main = warpDebug 3000 RoboSite
+main = do
+    warpDebug 3000 RoboSite
+
+---- highcharts JSON stuff
+
+gridGraphTitles :: String -> String -> String -> String -> [(String, J.JSValue)]
+gridGraphTitles title subtitle xaxis yaxix = [
+    ("title", J.makeObj [
+        ("text", J.showJSON title),
+        ("x", J.showJSON (-20 :: Int))
+    ]),
+    ("subtitle", J.makeObj [
+        ("text", J.showJSON subtitle),
+        ("x", J.showJSON (-20 :: Int))
+    ]),
+    ("xAxis", J.makeObj [
+        ("title", J.makeObj [
+            ("text", jsonString xaxis)
+        ])
+    ]),
+    ("yAxis", J.makeObj [
+        ("title", J.makeObj [
+            ("text", J.showJSON yaxix)
+        ]),
+        ("plotLines", J.showJSONs $ [
+            J.toJSObject [
+                ("value", J.showJSON (0 :: Int)),
+                ("width", J.showJSON (1 :: Int)),
+                ("color", jsonString "#808080")
+            ]
+        ])
+    ])
+    ]
+
+gridPlottingSettings :: [(String, J.JSValue)]
+gridPlottingSettings = [
+    ("chart", J.makeObj [
+        ("renderTo", jsonString "container"),
+        ("defaultSeriesType", jsonString "scatter"),
+        ("zoomType", jsonString "xy")
+    ]),
+    ("legend", J.makeObj [
+        ("layout", jsonString "vertical"),
+        ("align", jsonString "right"),
+        ("verticalAlign", jsonString "top"),
+        ("x", J.showJSON (10 :: Int)),
+        ("y", J.showJSON (10 :: Int)),
+        ("borderWidth", J.showJSON (0 :: Int))
+    ])
+    ]
+
+linePlottingSettings :: [(String, J.JSValue)]
+linePlottingSettings = [
+    ("chart", J.makeObj [
+        ("renderTo", jsonString "container"),
+        ("defaultSeriesType", jsonString "line"),
+        ("marginRight", J.showJSON (130 :: Int)),
+        ("marginBottom", J.showJSON (25 :: Int)),
+        ("zoomType", jsonString "xy")
+    ]),
+    ("legend", J.makeObj [
+        ("layout", jsonString "vertical"),
+        ("align", jsonString "right"),
+        ("verticalAlign", jsonString "top"),
+        ("x", J.showJSON (10 :: Int)),
+        ("y", J.showJSON (10 :: Int)),
+        ("borderWidth", J.showJSON (0 :: Int))
+    ])
+    ]
+
+timeWiseGraphTitles :: String -> String -> String -> [(String, J.JSValue)]
+timeWiseGraphTitles title subtitle yaxix = [
+    ("title", J.makeObj [
+        ("text", J.showJSON title),
+        ("x", J.showJSON (-20 :: Int))
+    ]),
+    ("subtitle", J.makeObj [
+        ("text", J.showJSON subtitle),
+        ("x", J.showJSON (-20 :: Int))
+    ]),
+    ("xAxis", J.makeObj [
+        ("type", jsonString "datetime"),
+        ("title", J.makeObj [
+            ("text", jsonString "Time")
+        ])
+    ]),
+    ("yAxis", J.makeObj [
+        ("title", J.makeObj [
+            ("text", J.showJSON yaxix)
+        ]),
+        ("plotLines", J.showJSONs $ [
+            J.toJSObject [
+                ("value", J.showJSON (0 :: Int)),
+                ("width", J.showJSON (1 :: Int)),
+                ("color", jsonString "#808080")
+            ]
+        ])
+    ])
+    ]
+
+jsonString = J.showJSON . J.toJSString
+
+gridChartSeries :: M.Map Label (M.Map ColonyId (Double,Double)) -> [(String, J.JSValue)]
+gridChartSeries pd = [("series", J.JSArray . concatMap labelGridSeries $ M.toList pd)]
+
+labelGridSeries :: (Label, (M.Map ColonyId (Double,Double))) -> [J.JSValue]
+labelGridSeries (l,vm) = map (gridPoint l) . M.toList $ vm
+
+gridPoint :: Label -> (ColonyId, (Double, Double)) -> J.JSValue
+gridPoint l (cid,(x,y)) = J.makeObj [
+    ("name", jsonString name),
+    ("data", J.showJSONs [[x,y]])]
+    where
+        name = l ++ " - " ++ (wellStr . cWell $ cid)
+
+linesChartSeries :: M.Map Label (M.Map ColonyId [(Double,DateTime)]) -> [(String, J.JSValue)]
+linesChartSeries pd = [("series", J.JSArray . concatMap labelLinesSeries $ M.toList pd)]
+    
+labelLinesSeries :: (Label, (M.Map ColonyId [(Double,DateTime)])) -> [J.JSValue]
+labelLinesSeries (l,vm) = map (lineSeries l) . M.toList $ vm
+
+lineSeries :: Label -> (ColonyId, [(Double, DateTime)]) -> J.JSValue
+lineSeries l (cid,vals) = J.makeObj [
+    ("name", jsonString name),
+    ("data", J.showJSONs jsvals)]
+    where
+        name = l ++ " - " ++ (wellStr . cWell $ cid)
+        jsvals = map (\(x,y) -> J.showJSONs [fromIntegral $ toSeconds y * 1000,x]) vals
+
+-- sometime in the future add:
+    {- ("tooltip", J.makeObj [
+        ("formatter", J.JSString ("function() {return '<b>'+ this.series.name +'</b><br/>'+ this.y; }") :: String)
+    ]), -}
