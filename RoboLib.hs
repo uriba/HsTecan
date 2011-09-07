@@ -28,6 +28,7 @@ module RoboLib (
     bFiltS,
     has,
     Label,
+    wellStr,
     )
 where
 import Graphics.Gnuplot.Simple
@@ -385,3 +386,7 @@ bFilt xs
 	    mn = minimum xs
 	    val = Just . meanL 
 	    relevant_data = filter (\x -> x < mx && x > mn) $ xs
+
+wellStr :: Well -> String
+wellStr w = concat ["(", [wRow w],",",show . wColumn $ w,")"]
+
