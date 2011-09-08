@@ -32,8 +32,8 @@ chartSubtitle st =  ("subtitle", J.makeObj [
                         ("x", J.showJSON (-20 :: Int))
                     ])
 
-chartAxis :: String -> String -> Maybe String -> JSObj
-chartAxis axis t atype =  (axis, J.makeObj $ [
+chartAxis :: String -> String -> Maybe String -> Maybe (Double,Double) -> JSObj
+chartAxis axis t atype m_limits =  (axis, J.makeObj $ [
                         ("title", J.makeObj [
                             ("text", jsonString t)
                         ]),
@@ -43,8 +43,14 @@ chartAxis axis t atype =  (axis, J.makeObj $ [
                                 ("width", J.showJSON (1 :: Int)),
                                 ("color", jsonString "#808080")
                             ]
-                        ])
-                    ] ++ (fromMaybe [] . fmap (\x -> [("type", jsonString x)]) $ atype))
+                        ]),
+                        ("startOnTick", J.showJSON True),
+                        ("endOnTick", J.showJSON True)
+                    ]   ++ (fromMaybe [] . fmap (\(low,high) -> 
+                                [ ("max", J.showJSON high), ("min", J.showJSON low)])
+                            $ m_limits)
+                        ++ (fromMaybe [] . fmap (\x -> [("type", jsonString x)]) $ atype)
+                 )
 
 chartXaxis = chartAxis "xAxis"
 chartYaxis = chartAxis "yAxis"

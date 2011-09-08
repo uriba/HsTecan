@@ -10,7 +10,7 @@ import Data.DateTime (toSeconds, DateTime)
 import System.FilePath (makeValid, (<.>))
 import Math.Combinatorics.Graph (combinationsOf)
 import RoboDB (ExpDesc(..), PlateDesc(..), WellDesc(..), DbMeasurement (..), readTable, DbReadable(..), dbConnectInfo, SelectCriteria(..))
-import RoboLib (Measurement(..), Well(..), wellFromInts, createExpData, ExpData, plotData, mesData, mesDataTime, expMesTypes, ExpId, MType, mesToOdData, plotIntensityGrid, smoothAll, bFiltS, intensityGridData, plotGridDataToStrings, plotLinesDataToStrings, Label, PlotGridData, ColonyId(..), wellStr)
+import RoboLib (Measurement(..), Well(..), wellFromInts, createExpData, ExpData, plotData, mesData, mesDataTime, expMesTypes, ExpId, MType, mesToOdData, timedMesToOdData, plotIntensityGrid, smoothAll, bFiltS, intensityGridData, plotGridDataToStrings, plotLinesDataToStrings, Label, PlotGridData, ColonyId(..), wellStr)
 import qualified Data.Text as T
 import qualified Data.Map as M
 import qualified Text.JSON as J
@@ -79,13 +79,6 @@ instance Yesod RoboSite where
 pngFileName :: FilePath -> String
 pngFileName fn = fn ++ ".png"
 
-plotMesToODApp :: ExpData -> FilePath -> String -> IO ()
-plotMesToODApp ed fn t = do
-    let sms = smoothAll bFiltS ed
-    let pd = mesToOdData sms t Nothing
-    let ofn = pngFileName fn
-    plotData t pd (Just ofn)
-
 getGridGraphData :: ExpId -> Plate -> MType -> MType -> GHandler RoboSite RoboSite RepHtml
 getGridGraphData exp plate x y = do
     exp_data <- liftIO $ loadExpDataDB exp (read plate)
@@ -101,7 +94,7 @@ getGridGraph exp plate x y = do
     let igd = intensityGridData sms (x,y) (logBase 10, logBase 10)
     let title = "Grid data of (" ++ x ++ ", " ++ y ++ ")"
     let subtitle = "Experiment: " ++ exp ++ ", Plate: " ++ plate
-    let chart_json = [chartTitle title, chartSubtitle subtitle, chartXaxis x Nothing, chartYaxis y Nothing, gridChart "container", chartLegend] ++ gridChartSeries igd
+    let chart_json = [chartTitle title, chartSubtitle subtitle, chartXaxis x Nothing (Just (1.5,6)), chartYaxis y Nothing (Just (1.5,6)), gridChart "container", chartLegend] ++ gridChartSeries igd
     let json_data = J.encode . J.makeObj $ chart_json
     defaultLayout $ do
         setTitle "Grid graph"
@@ -132,13 +125,35 @@ getExpLevelData exp plate t = do
     let bytes = genCsvFile . plotLinesDataToStrings $ pd
     sendResponse (typePlain, toContent bytes)
 
-getExpLevelGraph :: ExpId -> Plate -> GraphType -> GHandler RoboSite RoboSite RepHtml
-getExpLevelGraph exp plate graph = do
+getExpLevelGraph :: ExpId -> Plate -> MType -> GHandler RoboSite RoboSite RepHtml
+getExpLevelGraph exp plate t = do
     exp_data <- liftIO $ loadExpDataDB exp (read plate)
-    let fn = makeValid (exp <.> plate <.> graph <.> "expLevel")
-    liftIO $ putStrLn ("generating: " ++ pngFileName fn)
-    liftIO $ plotMesToODApp exp_data fn graph
-    sendFile typePng $ pngFileName fn
+    let sms = smoothAll bFiltS exp_data
+    let pd = timedMesToOdData sms t Nothing
+    let page_title = t ++ ", " ++ plate ++ " - " ++ exp
+    let title = "Expression level of " ++ t
+    let subtitle = "Experiment: " ++ exp ++ ", Plate: " ++ plate
+    let chart_json = [chartTitle title, chartSubtitle subtitle, chartXaxis "Time" (Just "datetime") Nothing, chartYaxis t Nothing Nothing, lineChart "container", chartLegend] ++ linesChartSeries pd
+    let json_data = J.encode . J.makeObj $ chart_json
+    defaultLayout $ do
+        setTitle "Raw measurement graph" -- replace to page_title
+        addJulius [$julius|
+        </script>
+        <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.6.1/jquery.min.js"></script>
+        <script type="text/javascript" src="/js/highcharts.js"></script> 
+        <script type="text/javascript" src="/js/modules/exporting.js"></script> 
+        
+        <!-- 2. Add the JavaScript to initialize the chart on document ready --> 
+        <script type="text/javascript"> 
+            var chart;
+            $(document).ready(function() {
+                chart = new Highcharts.Chart(#{json_data});
+            });
+|]
+        addHamlet [$hamlet|
+<h1> Read data graph
+<div #container style="width: 800px; height: 800px; margin: 0 auto">
+|]
 
 getReadGraphData :: ExpId -> Plate -> MType -> GHandler RoboSite RoboSite RepHtml
 getReadGraphData exp plate t = do
@@ -154,7 +169,7 @@ getReadGraph exp plate t = do
     let page_title = t ++ ", " ++ plate ++ " - " ++ exp
     let title = "Measurement data of " ++ t
     let subtitle = "Experiment: " ++ exp ++ ", Plate: " ++ plate
-    let chart_json = [chartTitle title, chartSubtitle subtitle, chartXaxis "Time" (Just "datetime"), chartYaxis t Nothing, lineChart "container", chartLegend] ++ linesChartSeries pd
+    let chart_json = [chartTitle title, chartSubtitle subtitle, chartXaxis "Time" (Just "datetime") Nothing, chartYaxis t Nothing Nothing, lineChart "container", chartLegend] ++ linesChartSeries pd
     let json_data = J.encode . J.makeObj $ chart_json
     defaultLayout $ do
         setTitle "Raw measurement graph" -- replace to page_title

@@ -11,10 +11,12 @@ module RoboLib (
     mesData,
     mesDataTime,
     mesToOdData,
+    timedMesToOdData,
     intensityGridData,
     plotGridDataToStrings,
     plotLinesDataToStrings,
     PlotLinesData,
+    TimedPlotLinesData,
     PlotGridData,
     loadExpData,
     ExpData,
@@ -68,6 +70,7 @@ type ExpData = M.Map Label (M.Map ColonyId [Measurement]) -- experiment data is 
 type ExpLevelData = M.Map Label (M.Map ColonyId [(MType,[Double])]) -- expression levels for each colony and measurement type.
 
 type PlotLinesData = M.Map Label (M.Map ColonyId [Double]) -- for each label - a list of colonies, for each colony - a line.
+type TimedPlotLinesData = M.Map Label (M.Map ColonyId [(Double, DateTime)]) -- for each label - a list of colonies, for each colony - a line.
 type PlotGridData = M.Map Label (M.Map ColonyId (Double,Double)) -- for each label - a list of colonies, for each colony - a line.
 
 -- utils for outputting plot data to files
@@ -217,31 +220,44 @@ plotData title pld m_fn = do
     let fileoptions = fromMaybe [] . fmap fileOpts $ m_fn
     plotListsStyle ([Title title] ++ fileoptions) plot_data
 
-mesDataTime :: ExpData -> MType -> M.Map Label (M.Map ColonyId [(Double,DateTime)])
+mesDataTime :: ExpData -> MType -> TimedPlotLinesData
 mesDataTime ed mt = M.map (M.map (map (\x -> (mVal x, mTime x)) . mesByTime mt)) ed
 
 mesData :: ExpData -> MType -> PlotLinesData
-mesData ed mt = M.map (M.map (valByTime mt)) ed
+mesData ed mt = M.map (M.map (map fst)) . mesDataTime (normalizePlate ed) $ mt
 
 plotMesData :: ExpData -> MType -> Maybe FilePath -> IO()
 plotMesData ed  mt m_fn = plotData mt (mesData ed mt) m_fn
 
 mesToOd :: MType -> Maybe (Int,Int) -> [Measurement] -> [Double]
 mesToOd mt Nothing ms = mesToOd mt (Just . mesLimits mt $ ms) $ ms 
-mesToOd mt (Just (low,high)) ms = m_to_od_vals
+mesToOd mt m_range ms = map fst . timedMesToOd mt m_range $ ms
+
+isLegal x = not $ isInfinite x || isNaN x
+
+timedMesToOd :: MType -> Maybe (Int,Int) -> [Measurement] -> [(Double,DateTime)]
+timedMesToOd mt Nothing ms = timedMesToOd mt (Just . mesLimits mt $ ms) $ ms 
+timedMesToOd mt (Just (low,high)) ms = removeIllegalPoints m_to_od_vals
     where
-	vals t = take (high - low) . drop low . valByTime t
-	diffs x = zipWith (-) (tail x) x
-	m_to_od_vals = zipWith (/) (diffs . vals mt $ ms) . vals "OD600" $ ms
+        mes t = take (high - low) . drop low . mesByTime t
+        vals t = map mVal . mes t
+        diffs x = zipWith (-) (tail x) x
+        m_to_od_vals = zipWith (\x y -> (x/mVal y, mTime y)) (diffs . vals mt $ ms) . mes "OD600" $ ms
 
 removeDeadWells :: ExpData -> ExpData
 removeDeadWells = M.filter (not . M.null) . M.map (M.filter liveWell)
 
+removeIllegalPoints = filter (isLegal . fst)
+
+timedMesToOdData :: ExpData -> MType -> Maybe (Int, Int) -> TimedPlotLinesData
+timedMesToOdData ed mt m_range = M.map (M.map (removeIllegalPoints . map (\(x,y) -> 
+                    (logBase 10 x, y)) . timedMesToOd mt m_range)) nbg
+    where
+        nbg = removeDeadWells . normalizePlate $ ed
+	
 -- consider combining code with plotGridData (currently problem is requirement for specifying limits here)
 mesToOdData :: ExpData -> MType -> Maybe (Int, Int) -> PlotLinesData
-mesToOdData ed mt m_range = M.map (M.map (map (logBase 10) . mesToOd mt m_range)) nbg
-    where
-	nbg = removeDeadWells . normalizePlate $ ed
+mesToOdData ed mt m_range = M.map (M.map (map fst)) . timedMesToOdData ed mt $ m_range
 	
 plotMesToOD :: ExpData -> MType -> Maybe (Int, Int) -> Maybe FilePath -> IO()
 plotMesToOD ed mt m_range m_fn = plotData (mt ++ " to OD") (mesToOdData ed mt m_range) m_fn
@@ -290,7 +306,7 @@ intensityGridData ed (xtype,ytype) (fx,fy) = grid_points
 	data_sets = {-subtractAutoFluorescence . -}expLevels . removeDeadWells . normalizePlate $ ed
 	plot_vals = M.map (M.map (map (\(mt,vals) -> (mt, calcexp vals)))) data_sets
 	grid_points = M.map (M.map (\x -> (fx . fromJust . lookup xtype $ x,fy . fromJust . lookup ytype $ x))) plot_vals
-	calcexp = maximum -- . map (meanL . take 3) . tails -- this is the strategy for calculating the expression level from its distinct values. it takes the maximum of the averages over windows of size 3.
+	calcexp = maximum . filter (>0) -- . map (meanL . take 3) . tails -- this is the strategy for calculating the expression level from its distinct values. it takes the maximum of the averages over windows of size 3.
 
 plotGrid :: String -> PlotGridData -> (String,String) -> Maybe FilePath -> IO ()
 plotGrid title pgd (xtype,ytype) m_fn = plotPathsStyle plot_attrs plot_lines
