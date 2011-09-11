@@ -9,7 +9,7 @@ module RoboLib (
     plotData,
     plotGrid,
     mesData,
-    mesDataTime,
+    timedMesData,
     mesToOdData,
     timedMesToOdData,
     intensityGridData,
@@ -220,11 +220,11 @@ plotData title pld m_fn = do
     let fileoptions = fromMaybe [] . fmap fileOpts $ m_fn
     plotListsStyle ([Title title] ++ fileoptions) plot_data
 
-mesDataTime :: ExpData -> MType -> TimedPlotLinesData
-mesDataTime ed mt = M.map (M.map (map (\x -> (mVal x, mTime x)) . mesByTime mt)) ed
+timedMesData :: ExpData -> MType -> TimedPlotLinesData
+timedMesData ed mt = M.map (M.map (map (\x -> (mVal x, mTime x)) . mesByTime mt)) ed
 
 mesData :: ExpData -> MType -> PlotLinesData
-mesData ed mt = M.map (M.map (map fst)) . mesDataTime (normalizePlate ed) $ mt
+mesData ed mt = M.map (M.map (map fst)) . timedMesData (normalizePlate ed) $ mt
 
 plotMesData :: ExpData -> MType -> Maybe FilePath -> IO()
 plotMesData ed  mt m_fn = plotData mt (mesData ed mt) m_fn
