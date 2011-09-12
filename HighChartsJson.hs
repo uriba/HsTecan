@@ -45,6 +45,7 @@ chartAxis axis t atype m_limits =  (axis, J.makeObj $ [
                             ]
                         ]),
                         ("startOnTick", J.showJSON True),
+                        ("gridLineWidth", J.showJSON (1 :: Int)),
                         ("endOnTick", J.showJSON True)
                     ]   ++ (fromMaybe [] . fmap (\(low,high) -> 
                                 [ ("max", J.showJSON high), ("min", J.showJSON low)])
