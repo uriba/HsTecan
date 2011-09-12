@@ -69,7 +69,9 @@ lineChart = chart "line"
 
 chartLegend :: JSObj
 chartLegend =   ("legend", J.makeObj [
-                    ("layout", jsonString "vertical"),
+                    ("layout", jsonString "horizontal"),
+                    ("width", J.showJSON (300 :: Int)),
+                    ("itemWidth", J.showJSON (150 :: Int)),
                     ("align", jsonString "right"),
                     ("verticalAlign", jsonString "top"),
                     ("x", J.showJSON (10 :: Int)),

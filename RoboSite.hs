@@ -98,7 +98,7 @@ graphPage title div chart_json = do
 
         addHamlet [$hamlet|
 <h1> #{title}
-<div ##{div} style="width: 800px; height: 800px; margin: 0 auto">
+<div ##{div} style="width: 1100px; height: 800px; margin: 0 auto">
 |]
 
 getGridGraphData :: ExpId -> Plate -> MType -> MType -> IO PlotGridData
