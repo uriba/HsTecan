@@ -89,6 +89,7 @@ graphPage title div chart_json = do
         
         <!-- 2. Add the JavaScript to initialize the chart on document ready --> 
         <script type="text/javascript"> 
+            Highcharts.setOptions({global: {useUTC: false}});
             var chart;
             $(document).ready(function() {
                 chart = new Highcharts.Chart(#{json_data});
