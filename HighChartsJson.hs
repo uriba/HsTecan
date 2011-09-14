@@ -8,10 +8,12 @@ module HighChartsJson (
     chartLegend,
     gridChartSeries,
     linesChartSeries,
+    colorsArray
 )
 where
 import qualified Text.JSON as J
 import qualified Data.Map as M
+import Text.Printf (printf)
 import RoboLib (Well(..), Label, PlotGridData, ColonyId(..), wellStr)
 import Data.Maybe (fromMaybe)
 import Data.DateTime (toSeconds, DateTime)
@@ -117,14 +119,32 @@ lineSeries l (cid,vals) = J.makeObj [
         name = l ++ " - " ++ (wellStr . cWell $ cid)
         jsvals = map (\(x,y) -> J.showJSONs [fromIntegral $ toSeconds y * 1000,x]) vals
 
-colorsArray :: (Integral a) => a -> [J.JSString]
-colorsArray x = map (rgbColor . (\c -> c/x)) [1..x]
+colorsArray :: (Integral a) => a -> [J.JSValue]
+colorsArray x = map (rgbColor . (\c -> (fromIntegral c) / fromIntegral x)) [1..x]
 
-rgbColor :: Double -> J.JSString
-rgbColor h = rgbToStr . hsvToRGB $ (h,0.5,0.95)
+rgbColor :: Double -> J.JSValue
+rgbColor h = rgbToStr . hsvTo256RGB $ (h,0.5,0.95)
 
-rgbToStr :: Integral a => (a,a,a) -> J.JSString
-rgbToStr (r,g,b) = '#' : concatMap (showHex "") [r,g,b]
+rgbToStr :: (Int,Int,Int) -> J.JSValue
+rgbToStr (r,g,b) = jsonString $ printf "#%02x%02x%02x" r g b
+
+dmod :: (Integral a) => Double -> a -> Double
+dmod x y = fromIntegral (floor x `mod` y) + (x - (fromIntegral . floor $ x))
+
+hsvTo256RGB :: (Double,Double,Double) -> (Int,Int,Int)
+hsvTo256RGB (h,s,v)= (norm r,norm g,norm b)
+	where
+		norm x = round $ 256*(x+m)
+		h'=6*h
+		c=v*s
+		x=c*(1-abs((h' `dmod` 2) - 1))
+		m = v - c
+		(r,g,b) | h' < 1 = (c,x,0)
+			| h' < 2 = (x,c,0)
+			| h' < 3 = (0,c,x)
+			| h' < 4 = (0,x,c)
+			| h' < 5 = (x,0,c)
+			| otherwise = (c,0,x)
 
 -- sometime in the future add:
     {- ("tooltip", J.makeObj [
