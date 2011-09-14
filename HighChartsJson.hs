@@ -15,7 +15,7 @@ import qualified Text.JSON as J
 import qualified Data.Map as M
 import Text.Printf (printf)
 import RoboLib (Well(..), Label, PlotGridData, ColonyId(..), wellStr)
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, fromJust)
 import Data.DateTime (toSeconds, DateTime)
 
 type JSObj = (String, J.JSValue)
@@ -92,28 +92,36 @@ timeWiseGraphTitles title subtitle yaxix = [
     ])
     ]
 
+indexedLables :: (Ord k) => M.Map k v -> M.Map (Int,k) v
+indexedLables m = M.mapKeys (index_key indexed_keys) m
+	where
+		indexed_keys = zip (M.keys m) [0..]
+		index_key ks k = (fromJust $ lookup k ks,k)
+
 gridChartSeries :: M.Map Label (M.Map ColonyId (Double,Double)) -> [JSObj]
-gridChartSeries pd = [("series", J.JSArray . concatMap labelGridSeries $ M.toList pd)]
+gridChartSeries pd = [("series", J.JSArray . concatMap (labelGridSeries (M.size pd)) $ M.toList . indexedLables $ pd)]
 
-labelGridSeries :: (Label, (M.Map ColonyId (Double,Double))) -> [J.JSValue]
-labelGridSeries (l,vm) = map (gridPoint l) . M.toList $ vm
+labelGridSeries :: Int -> ((Int,Label), (M.Map ColonyId (Double,Double))) -> [J.JSValue]
+labelGridSeries s (l,vm) = map (gridPoint s l) . M.toList $ vm
 
-gridPoint :: Label -> (ColonyId, (Double, Double)) -> J.JSValue
-gridPoint l (cid,(x,y)) = J.makeObj [
+gridPoint :: Int -> (Int,Label) -> (ColonyId, (Double, Double)) -> J.JSValue
+gridPoint s (i,l) (cid,(x,y)) = J.makeObj [
     ("name", jsonString name),
+    ("color", colorsArray s !! i),
     ("data", J.showJSONs [[x,y]])]
     where
         name = l ++ " - " ++ (wellStr . cWell $ cid)
 
 linesChartSeries :: M.Map Label (M.Map ColonyId [(Double,DateTime)]) -> [JSObj]
-linesChartSeries pd = [("series", J.JSArray . concatMap labelLinesSeries $ M.toList pd)]
+linesChartSeries pd = [("series", J.JSArray . concatMap (labelLinesSeries (M.size pd)) $ M.toList . indexedLables $ pd)]
     
-labelLinesSeries :: (Label, (M.Map ColonyId [(Double,DateTime)])) -> [J.JSValue]
-labelLinesSeries (l,vm) = map (lineSeries l) . M.toList $ vm
+labelLinesSeries :: Int -> ((Int,Label), (M.Map ColonyId [(Double,DateTime)])) -> [J.JSValue]
+labelLinesSeries s (l,vm) = map (lineSeries s l) . M.toList $ vm
 
-lineSeries :: Label -> (ColonyId, [(Double, DateTime)]) -> J.JSValue
-lineSeries l (cid,vals) = J.makeObj [
+lineSeries :: Int -> (Int,Label) -> (ColonyId, [(Double, DateTime)]) -> J.JSValue
+lineSeries s (i,l) (cid,vals) = J.makeObj [
     ("name", jsonString name),
+    ("color", colorsArray s !! i),
     ("data", J.showJSONs jsvals)]
     where
         name = l ++ " - " ++ (wellStr . cWell $ cid)
