@@ -117,6 +117,15 @@ lineSeries l (cid,vals) = J.makeObj [
         name = l ++ " - " ++ (wellStr . cWell $ cid)
         jsvals = map (\(x,y) -> J.showJSONs [fromIntegral $ toSeconds y * 1000,x]) vals
 
+colorsArray :: (Integral a) => a -> [J.JSString]
+colorsArray x = map (rgbColor . (\c -> c/x)) [1..x]
+
+rgbColor :: Double -> J.JSString
+rgbColor h = rgbToStr . hsvToRGB $ (h,0.5,0.95)
+
+rgbToStr :: Integral a => (a,a,a) -> J.JSString
+rgbToStr (r,g,b) = '#' : concatMap (showHex "") [r,g,b]
+
 -- sometime in the future add:
     {- ("tooltip", J.makeObj [
         ("formatter", J.JSString ("function() {return '<b>'+ this.series.name +'</b><br/>'+ this.y; }") :: String)
