@@ -63,8 +63,9 @@ type GraphType = String
 
 mkYesod "RoboSite" [$parseRoutes|
 /RoboSite HomeR GET
-/RoboSite/update/#ExpId/ UpdateExpDesc GET
-/RoboSite/update/#ExpId/#Plate/ UpdatePlateDesc GET
+/RoboSite/update/#ExpId/ UpdateExpForm GET
+/RoboSite/update/#ExpId/#Plate/ UpdatePlateForm GET
+/RoboSite/updated/#ExpId/#Plate/ UpdateLabel GET
 /RoboSite/graph/#ExpId/#Plate/#GraphType/Read ReadGraph GET
 /RoboSite/graph/#ExpId/#Plate/#GraphType/LogRead LogReadGraph GET
 /RoboSite/data/#ExpId/#Plate/#GraphType/Read ReadGraphCSV GET
@@ -190,30 +191,36 @@ data Params = Params {label :: T.Text}
 descFormlet :: Formlet s m Params
 descFormlet mdesc = fieldsToTable $ Params <$> stringField "Label" (fmap label mdesc)
 
-getUpdatePlateDesc :: ExpId -> Plate -> GHandler RoboSite RoboSite RepHtml
-getUpdatePlateDesc eid p = updateDesc eid (Just p)
+getUpdatePlateForm :: ExpId -> Plate -> GHandler RoboSite RoboSite RepHtml
+getUpdatePlateForm eid p = updateForm eid (Just p)
 
-getUpdateExpDesc :: ExpId -> GHandler RoboSite RoboSite RepHtml
-getUpdateExpDesc eid = updateDesc eid Nothing
+getUpdateExpForm :: ExpId -> GHandler RoboSite RoboSite RepHtml
+getUpdateExpForm eid = updateForm eid Nothing
 
-updateDesc :: ExpId -> Maybe Plate -> GHandler RoboSite RoboSite RepHtml
-updateDesc eid mp = do
+getUpdateLabel :: ExpId -> Plate -> GHandler RoboSite RoboSite RepHtml
+getUpdateLabel eid p = do
     let m_label = Just . Params . T.pack $ "default"
     (res, form, enctype) <- runFormGet $ descFormlet m_label
     output <-
         case res of
-            FormMissing -> return . T.pack $ "Enter new label"
+            FormMissing -> return . T.pack $ "Missing data!"
             FormFailure _ -> return . T.pack $ "Please correct the errors below."
             FormSuccess (Params label) -> do
-                if isJust mp
+                if p == "-1"
                     then
-                        liftIO . updatePlateLabel eid (read . fromJust $ mp) . T.unpack $ label
-                    else
                         liftIO . updateExpLabel eid . T.unpack $ label
+                    else
+                        liftIO . updatePlateLabel eid (read p) . T.unpack $ label
                 return . T.pack $ "Label updated"
+    getHomeR
+
+updateForm :: ExpId -> Maybe Plate -> GHandler RoboSite RoboSite RepHtml
+updateForm eid mp = do
+    let m_label = Just . Params . T.pack $ "default"
+    (res, form, enctype) <- runFormGet $ descFormlet m_label
     defaultLayout [$hamlet|
 <p>Enter new label
-<form enctype="#{enctype}">
+<form enctype="#{enctype}" action=@{UpdateLabel eid (fromMaybe "-1" mp)}>
     <table>
         ^{form}
         <tr>
@@ -254,7 +261,7 @@ getHomeR = do
                 $nothing
                     #{fst exp}
             \ #
-            <a href=@{UpdateExpDesc (fst exp)}>
+            <a href=@{UpdateExpForm (fst exp)}>
                 [Update label]
             <div ##{fst exp} style="display: none;">
                 <ul>
@@ -266,7 +273,7 @@ getHomeR = do
                                 $nothing
                                     Plate #{fst plate}
                             \ #
-                            <a href=@{UpdatePlateDesc (fst exp) (fst plate)}>
+                            <a href=@{UpdatePlateForm (fst exp) (fst plate)}>
                                 [Update label]
                             <div ##{fst exp}#{fst plate} style="display: none;">
                                 <ul>
