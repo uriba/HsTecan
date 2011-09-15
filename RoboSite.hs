@@ -66,6 +66,7 @@ mkYesod "RoboSite" [$parseRoutes|
 /RoboSite/update/#ExpId/ UpdateExpDesc GET
 /RoboSite/update/#ExpId/#Plate/ UpdatePlateDesc GET
 /RoboSite/graph/#ExpId/#Plate/#GraphType/Read ReadGraph GET
+/RoboSite/graph/#ExpId/#Plate/#GraphType/LogRead LogReadGraph GET
 /RoboSite/data/#ExpId/#Plate/#GraphType/Read ReadGraphCSV GET
 /RoboSite/graph/#ExpId/#Plate/#GraphType/Exp ExpLevelGraph GET
 /RoboSite/data/#ExpId/#Plate/#GraphType/Exp ExpLevelCSV GET
@@ -154,6 +155,17 @@ getReadGraphCSV exp plate t = do
     pd <- liftIO $ getReadGraphData exp plate t
     let bytes = genCsvFile . plotLinesDataToStrings . M.map (M.map (map fst)) $ pd
     sendResponse (typePlain, toContent bytes)
+
+getLogReadGraph :: ExpId -> Plate -> MType -> GHandler RoboSite RoboSite RepHtml
+getLogReadGraph exp plate t = do
+    pd <- liftIO $ getReadGraphData exp plate t
+    let lpd = M.map (M.map (map (\(x,y) -> (logBase 10 x,y)))) pd
+    let div_obj = "container"
+    let page_title = t ++ ", " ++ plate ++ " - " ++ exp
+    let title = "Measurement data of " ++ t
+    let subtitle = "Experiment: " ++ exp ++ ", Plate: " ++ plate
+    let chart_json = [chartTitle title, chartSubtitle subtitle, chartXaxis "Time" (Just "datetime") Nothing, chartYaxis t Nothing Nothing, lineChart div_obj, chartLegend] ++ linesChartSeries lpd
+    graphPage title div_obj chart_json
 
 getReadGraph :: ExpId -> Plate -> MType -> GHandler RoboSite RoboSite RepHtml
 getReadGraph exp plate t = do
@@ -269,6 +281,9 @@ getHomeR = do
                                                 <li>
                                                     <a href=@{ReadGraph (fst exp) (fst plate) mtype}>
                                                         #{mtype}
+                                                    \ #
+                                                    <a href=@{LogReadGraph (fst exp) (fst plate) mtype}>
+                                                        Log scale #{mtype}
                                                     \ #
                                                     <a href=@{ReadGraphCSV (fst exp) (fst plate) mtype}>
                                                         [Get data]
