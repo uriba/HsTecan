@@ -157,24 +157,20 @@ getReadGraphCSV exp plate t = do
     sendResponse (typePlain, toContent bytes)
 
 getLogReadGraph :: ExpId -> Plate -> MType -> GHandler RoboSite RoboSite RepHtml
-getLogReadGraph exp plate t = do
-    pd <- liftIO $ getReadGraphData exp plate t
-    let lpd = M.map (M.map (map (\(x,y) -> (logBase 10 x,y)))) pd
-    let div_obj = "container"
-    let page_title = t ++ ", " ++ plate ++ " - " ++ exp
-    let title = "Measurement data of " ++ t
-    let subtitle = "Experiment: " ++ exp ++ ", Plate: " ++ plate
-    let chart_json = [chartTitle title, chartSubtitle subtitle, chartXaxis "Time" (Just "datetime") Nothing, chartYaxis t Nothing Nothing, lineChart div_obj, chartLegend] ++ linesChartSeries lpd
-    graphPage title div_obj chart_json
+getLogReadGraph = getTransformedReadGraph (logBase 10) "Log scale"
 
 getReadGraph :: ExpId -> Plate -> MType -> GHandler RoboSite RoboSite RepHtml
-getReadGraph exp plate t = do
+getReadGraph = getTransformedReadGraph id ""
+
+getTransformedReadGraph :: (Double -> Double) -> String -> ExpId -> Plate -> MType -> GHandler RoboSite RoboSite RepHtml
+getTransformedReadGraph f desc exp plate t = do
     pd <- liftIO $ getReadGraphData exp plate t
+    let mpd = M.map (M.map (map (\(x,y) -> (f x,y)))) pd
     let div_obj = "container"
     let page_title = t ++ ", " ++ plate ++ " - " ++ exp
-    let title = "Measurement data of " ++ t
+    let title = "Measurement data of " ++ t ++ " - " ++ desc
     let subtitle = "Experiment: " ++ exp ++ ", Plate: " ++ plate
-    let chart_json = [chartTitle title, chartSubtitle subtitle, chartXaxis "Time" (Just "datetime") Nothing, chartYaxis t Nothing Nothing, lineChart div_obj, chartLegend] ++ linesChartSeries pd
+    let chart_json = [chartTitle title, chartSubtitle subtitle, chartXaxis "Time" (Just "datetime") Nothing, chartYaxis t Nothing Nothing, lineChart div_obj, chartLegend] ++ linesChartSeries mpd
     graphPage title div_obj chart_json
 
 updatePlateLabel :: ExpId -> Int -> String -> IO ()
