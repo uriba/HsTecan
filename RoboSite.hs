@@ -1,5 +1,7 @@
 {-# LANGUAGE TypeFamilies, QuasiQuotes, MultiParamTypeClasses, TemplateHaskell, OverloadedStrings, TypeSynonymInstances, OverlappingInstances #-}
 import Yesod
+import Yesod.Form.Fields (fileAFormReq)
+import Yesod.Form.Jquery
 import Database.HDBC.MySQL
 import Database.HDBC
 import Data.ByteString.UTF8 (toString)
@@ -13,10 +15,15 @@ import RoboDB (ExpDesc(..), PlateDesc(..), WellDesc(..), DbMeasurement (..), rea
 import RoboLib (Measurement(..), Well(..), wellFromInts, createExpData, ExpData, plotData, timedMesData, expMesTypes, ExpId, MType, mesToOdData, timedMesToOdData, plotIntensityGrid, smoothAll, bFiltS, intensityGridData, plotGridDataToStrings, plotLinesDataToStrings, Label, PlotGridData, ColonyId(..), wellStr, TimedPlotLinesData)
 import qualified Data.Text as T
 import qualified Data.Map as M
+import qualified Data.ByteString.Lazy as BS
+import qualified Data.ByteString.UTF8 as U
 import qualified Text.JSON as J
-import Control.Applicative ((<$>))
+import Control.Applicative ((<$>), pure, (<*>))
 import Data.CSV (genCsvFile)
 import HighChartsJson
+import Text.ParserCombinators.Parsec
+import Data.CSV
+import Data.Either.Utils
 
 data GraphDesc = GraphDesc {gdExp :: ExpId, gdPlate :: Plate, gdMesType :: MType, gdExpDesc :: Maybe String, gdPlateDesc :: Maybe String} deriving (Show)
 
@@ -65,6 +72,8 @@ mkYesod "RoboSite" [$parseRoutes|
 /RoboSite HomeR GET
 /RoboSite/update/#ExpId/ UpdateExpForm GET
 /RoboSite/update/#ExpId/#Plate/ UpdatePlateForm GET
+/RoboSite/upload/#ExpId/#Plate/ UploadPlateDesc GET
+/RoboSite/uploaded/#ExpId/#Plate/ UploadedPlateDesc POST
 /RoboSite/updated/#ExpId/#Plate/ UpdateLabel GET
 /RoboSite/graph/#ExpId/#Plate/#GraphType/Read ReadGraph GET
 /RoboSite/graph/#ExpId/#Plate/#GraphType/LogRead LogReadGraph GET
@@ -78,7 +87,40 @@ mkYesod "RoboSite" [$parseRoutes|
 instance Yesod RoboSite where
     approot _ = ""
 
-graphPage :: String -> String -> [(String,J.JSValue)] -> GHandler RoboSite RoboSite RepHtml
+instance RenderMessage RoboSite FormMessage where
+    renderMessage _ _ = defaultFormMessage
+
+instance YesodJquery RoboSite
+
+-- update me
+uploadPlateDesc = renderTable $ pure (,) <*> fileAFormReq "CSV file to upload:"
+
+getUploadPlateDesc :: String -> String -> Handler RepHtml
+getUploadPlateDesc eid p = do
+    ((_,widget),enctype) <- generateFormPost uploadPlateDesc
+    defaultLayout [$whamlet|
+    <p> Upload plate wells description file
+    <form method=post action=@{UploadedPlateDesc eid p} enctype=#{enctype}>
+        ^{widget}
+        <input type=submit>
+|]
+
+updatePlateLabels :: ExpId -> Int -> [[String]] -> IO ()
+updatePlateLabels eid p labels = sequence_ update_labels
+    where
+        update_labels = zipWith (update_plate_row eid p) [0..] labels 
+        update_plate_row e p r ls = sequence_ $ zipWith (updateWellLabel e p r) [0..] ls
+
+postUploadedPlateDesc :: String -> String -> Handler RepHtml
+postUploadedPlateDesc eid p = do
+    (_,files) <- runRequestBody
+    liftIO . putStrLn $ "got post request for eid" ++ eid ++ " and plate:" ++ p
+    let parsed = fromRight . parse csvFile "" $ concatMap U.toString . BS.toChunks . fileContent . snd . head $ files
+    liftIO $ updatePlateLabels eid (read p) parsed
+    liftIO . putStrLn . show $ parsed
+    getHomeR
+
+graphPage :: String -> String -> [(String,J.JSValue)] -> Handler RepHtml
 graphPage title div chart_json = do
     let json_data = J.encode . J.makeObj $ chart_json
     defaultLayout $ do
@@ -109,13 +151,13 @@ getGridGraphData exp plate x y = do
     let sms = smoothAll bFiltS exp_data
     return $ intensityGridData sms (x,y) (logBase 10, logBase 10)
 
-getGridGraphCSV :: ExpId -> Plate -> MType -> MType -> GHandler RoboSite RoboSite RepHtml
+getGridGraphCSV :: ExpId -> Plate -> MType -> MType -> Handler RepHtml
 getGridGraphCSV exp plate x y = do
     igd <- liftIO $ getGridGraphData exp plate x y
     let bytes = genCsvFile . plotGridDataToStrings $ igd
     sendResponse (typePlain, toContent bytes)
 
-getGridGraph :: ExpId -> Plate -> MType -> MType -> GHandler RoboSite RoboSite RepHtml
+getGridGraph :: ExpId -> Plate -> MType -> MType -> Handler RepHtml
 getGridGraph exp plate x y = do
     igd <- liftIO $ getGridGraphData exp plate x y
     let div_obj = "container"
@@ -130,13 +172,13 @@ getExpLevelData exp plate t = do
     let sms = smoothAll bFiltS exp_data
     return $ timedMesToOdData sms t Nothing
 
-getExpLevelCSV :: ExpId -> Plate -> MType -> GHandler RoboSite RoboSite RepHtml
+getExpLevelCSV :: ExpId -> Plate -> MType -> Handler RepHtml
 getExpLevelCSV exp plate t = do
     pd <- liftIO $ getExpLevelData exp plate t
     let bytes = genCsvFile . plotLinesDataToStrings . M.map (M.map (map fst)) $ pd
     sendResponse (typePlain, toContent bytes)
 
-getExpLevelGraph :: ExpId -> Plate -> MType -> GHandler RoboSite RoboSite RepHtml
+getExpLevelGraph :: ExpId -> Plate -> MType -> Handler RepHtml
 getExpLevelGraph exp plate t = do
     pd <- liftIO $ getExpLevelData exp plate t
     let div_obj = "container"
@@ -151,19 +193,19 @@ getReadGraphData exp plate t = do
     exp_data <- liftIO $ loadExpDataDB exp (read plate)
     return $ timedMesData exp_data t
 
-getReadGraphCSV :: ExpId -> Plate -> MType -> GHandler RoboSite RoboSite RepHtml
+getReadGraphCSV :: ExpId -> Plate -> MType -> Handler RepHtml
 getReadGraphCSV exp plate t = do
     pd <- liftIO $ getReadGraphData exp plate t
     let bytes = genCsvFile . plotLinesDataToStrings . M.map (M.map (map fst)) $ pd
     sendResponse (typePlain, toContent bytes)
 
-getLogReadGraph :: ExpId -> Plate -> MType -> GHandler RoboSite RoboSite RepHtml
+getLogReadGraph :: ExpId -> Plate -> MType -> Handler RepHtml
 getLogReadGraph = getTransformedReadGraph (logBase 10) "Log scale"
 
-getReadGraph :: ExpId -> Plate -> MType -> GHandler RoboSite RoboSite RepHtml
+getReadGraph :: ExpId -> Plate -> MType -> Handler RepHtml
 getReadGraph = getTransformedReadGraph id ""
 
-getTransformedReadGraph :: (Double -> Double) -> String -> ExpId -> Plate -> MType -> GHandler RoboSite RoboSite RepHtml
+getTransformedReadGraph :: (Double -> Double) -> String -> ExpId -> Plate -> MType -> Handler RepHtml
 getTransformedReadGraph f desc exp plate t = do
     pd <- liftIO $ getReadGraphData exp plate t
     let mpd = M.map (M.map (map (\(x,y) -> (f x,y)))) pd
@@ -173,6 +215,12 @@ getTransformedReadGraph f desc exp plate t = do
     let subtitle = "Experiment: " ++ exp ++ ", Plate: " ++ plate
     let chart_json = [chartTitle title, chartSubtitle subtitle, chartXaxis "Time" (Just "datetime") Nothing, chartYaxis t Nothing Nothing, lineChart div_obj, chartLegend] ++ linesChartSeries mpd
     graphPage title div_obj chart_json
+
+updateWellLabel :: ExpId -> Int -> Int -> Int -> String -> IO ()
+updateWellLabel eid p r c l = do
+    conn <- connectMySQL dbConnectInfo
+    _ <- run conn "INSERT INTO tecan_labels (exp_id,plate,row,col,label) VALUES (?,?,?,?,?) ON DUPLICATE KEY UPDATE label = ?" [toSql eid, toSql p, toSql r, toSql c, toSql l, toSql l]
+    return ()
 
 updatePlateLabel :: ExpId -> Int -> String -> IO ()
 updatePlateLabel eid p l = do
@@ -188,19 +236,19 @@ updateExpLabel eid l = do
 
 data Params = Params {label :: T.Text}
 
-descFormlet :: Formlet s m Params
-descFormlet mdesc = fieldsToTable $ Params <$> stringField "Label" (fmap label mdesc)
+labelUpdateForm :: Html -> Form RoboSite RoboSite (FormResult Params,Widget)
+labelUpdateForm = renderDivs $ Params <$> areq textField "Label" Nothing
 
-getUpdatePlateForm :: ExpId -> Plate -> GHandler RoboSite RoboSite RepHtml
+getUpdatePlateForm :: ExpId -> Plate -> Handler RepHtml
 getUpdatePlateForm eid p = updateForm eid (Just p)
 
-getUpdateExpForm :: ExpId -> GHandler RoboSite RoboSite RepHtml
+getUpdateExpForm :: ExpId -> Handler RepHtml
 getUpdateExpForm eid = updateForm eid Nothing
 
-getUpdateLabel :: ExpId -> Plate -> GHandler RoboSite RoboSite RepHtml
+getUpdateLabel :: ExpId -> Plate -> Handler RepHtml
 getUpdateLabel eid p = do
     let m_label = Just . Params . T.pack $ "default"
-    (res, form, enctype) <- runFormGet $ descFormlet m_label
+    ((res, widget), enctype) <- runFormGet labelUpdateForm
     output <-
         case res of
             FormMissing -> return . T.pack $ "Missing data!"
@@ -214,15 +262,14 @@ getUpdateLabel eid p = do
                 return . T.pack $ "Label updated"
     getHomeR
 
-updateForm :: ExpId -> Maybe Plate -> GHandler RoboSite RoboSite RepHtml
+updateForm :: ExpId -> Maybe Plate -> Handler RepHtml
 updateForm eid mp = do
-    let m_label = Just . Params . T.pack $ "default"
-    (res, form, enctype) <- runFormGet $ descFormlet m_label
-    defaultLayout [$hamlet|
+    ((_, widget), enctype) <- generateFormGet $ labelUpdateForm
+    defaultLayout [$whamlet|
 <p>Enter new label
 <form enctype="#{enctype}" action=@{UpdateLabel eid (fromMaybe "-1" mp)}>
     <table>
-        ^{form}
+        ^{widget}
         <tr>
             <td colspan="2">
                 <input type="submit" value="Update">
@@ -242,7 +289,7 @@ grids e p gd = zip (map head all_pairs) (map last all_pairs)
     where
         all_pairs = combinationsOf 2 . expLevels e p $ gd
 
-getHomeR :: GHandler RoboSite RoboSite RepHtml
+getHomeR :: Handler RepHtml
 getHomeR = do
     disp_data <- liftIO loadExps
     let exp_descs =  reverse . sort . nub $ [ (gdExp x, gdExpDesc x) | x <- disp_data]
@@ -275,6 +322,8 @@ getHomeR = do
                             \ #
                             <a href=@{UpdatePlateForm (fst exp) (fst plate)}>
                                 [Update label]
+                            <a href=@{UploadPlateDesc (fst exp) (fst plate)}>
+                                [Upload well labels]
                             <div ##{fst exp}#{fst plate} style="display: none;">
                                 <ul>
                                     <li>
