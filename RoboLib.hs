@@ -110,14 +110,14 @@ type MesTypeCorrectionVals = Map MType Double
 
 -- When subtracting background noise these are the minimal legal values.
 minValMap :: MesTypeCorrectionVals
-minValMap = M.fromList [("OD600",0), ("YFP", 1), ("MCHERRY",1),("CFP",1)]
+minValMap = M.fromList [("OD600",0.001), ("YFP", 1), ("MCHERRY",1),("CFP",1)]
 
 constantBackgroundMap :: ExpData -> MesTypeCorrectionVals
 constantBackgroundMap ed = M.fromList [(m, bg m) | m <- mes_types]
     where
 	bg m = meanL . map mVal . filterByType m $ bg_mes 
 	mes_types = mesTypes bg_mes
-	bg_mes = concat . M.elems $ (ed ! mediaId)
+	bg_mes = concat . filter (not . liveWell) . M.elems $ (ed ! mediaId)
 
 subtractConstantBackground :: ExpData -> ExpData
 subtractConstantBackground ed = M.map (M.map (map (\x -> x {mVal = corrected_mval x}))) ed
@@ -185,7 +185,8 @@ createExpData ms = M.fromList [ (label, m_for_label label) | label <- labels ms]
 	m_for_label l = M.fromList [ (colony_id, m_for_colony colony_id) | colony_id <- colonies l ms ]
 
 odLiveThreshold = 0.2
-odThreshold = 0.06
+odThreshold = 0.01
+stdMinOd = 0.045
 odMaxT = 0.15
 
 verifySingleColony :: [Measurement] -> [Measurement]
@@ -221,16 +222,15 @@ plotData title pld m_fn = do
     plotListsStyle ([Title title] ++ fileoptions) plot_data
 
 timedMesData :: ExpData -> MType -> TimedPlotLinesData
-timedMesData ed mt = M.map (M.map (map (\x -> (mVal x, mTime x)) . mesByTime mt)) ed
+timedMesData ed mt = M.map (M.map (map (\x -> (mVal x, mTime x)) . mesByTime mt)) (normalizePlate ed)
 
 mesData :: ExpData -> MType -> PlotLinesData
-mesData ed mt = M.map (M.map (map fst)) . timedMesData (normalizePlate ed) $ mt
+mesData ed mt = M.map (M.map (map fst)) . timedMesData ed $ mt
 
 plotMesData :: ExpData -> MType -> Maybe FilePath -> IO()
 plotMesData ed  mt m_fn = plotData mt (mesData ed mt) m_fn
 
 mesToOd :: MType -> Maybe (Int,Int) -> [Measurement] -> [Double]
-mesToOd mt Nothing ms = mesToOd mt (Just . mesLimits mt $ ms) $ ms 
 mesToOd mt m_range ms = map fst . timedMesToOd mt m_range $ ms
 
 isLegal x = not $ isInfinite x || isNaN x
@@ -268,10 +268,12 @@ minIdx xs = fromJust . findIndex ((==) . minimum $ xs) $ xs
 odLimits :: [Double] -> (Int,Int) -- assumes time-wise sorted list of OD measurements.
 odLimits ods = (low,high)
     where
-	rods = reverse ods
-	low = length ods - (fromMaybe (minIdx rods) . findIndex (< odThreshold) $ rods)
-	high = length ods -- (fromJust . findIndex (< upper_limit ods) $ rods)
-	upper_limit x = (minimum x + maximum x) / 2
+        normalized = minimum ods == minValMap ! "OD600"
+        od_threshold = if normalized then odThreshold else odThreshold + stdMinOd
+        rods = reverse ods
+        low = length ods - (fromMaybe (minIdx rods) . findIndex (< od_threshold) $ rods)
+        high = length ods -- (fromJust . findIndex (< upper_limit ods) $ rods)
+        upper_limit x = (minimum x + maximum x) / 2
 
 mesLimits :: MType -> [Measurement] -> (Int,Int)
 mesLimits mt ms = (low,high)
