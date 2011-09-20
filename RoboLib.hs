@@ -308,7 +308,7 @@ intensityGridData ed (xtype,ytype) (fx,fy) = grid_points
 	data_sets = {-subtractAutoFluorescence . -}expLevels . removeDeadWells . normalizePlate $ ed
 	plot_vals = M.map (M.map (map (\(mt,vals) -> (mt, calcexp vals)))) data_sets
 	grid_points = M.map (M.map (\x -> (fx . fromJust . lookup xtype $ x,fy . fromJust . lookup ytype $ x))) plot_vals
-	calcexp = maximum . filter (>0) -- . map (meanL . take 3) . tails -- this is the strategy for calculating the expression level from its distinct values. it takes the maximum of the averages over windows of size 3.
+	calcexp = meanL . take 3 . drop 2 . reverse . sort
 
 plotGrid :: String -> PlotGridData -> (String,String) -> Maybe FilePath -> IO ()
 plotGrid title pgd (xtype,ytype) m_fn = plotPathsStyle plot_attrs plot_lines
