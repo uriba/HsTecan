@@ -187,7 +187,6 @@ createExpData ms = M.fromList [ (label, m_for_label label) | label <- labels ms]
 odLiveThreshold = 0.2
 odThreshold = 0.01
 stdMinOd = 0.045
-odMaxT = 0.15
 
 verifySingleColony :: [Measurement] -> [Measurement]
 verifySingleColony ms

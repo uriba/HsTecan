@@ -163,7 +163,7 @@ getGridGraph exp plate x y = do
     let div_obj = "container"
     let title = "Grid data of (" ++ x ++ ", " ++ y ++ ")"
     let subtitle = "Experiment: " ++ exp ++ ", Plate: " ++ plate
-    let chart_json = [chartTitle title, chartSubtitle subtitle, chartXaxis x Nothing (Just (1.5,6)), chartYaxis y Nothing (Just (1.5,6)), gridChart div_obj, chartLegend] ++ gridChartSeries igd
+    let chart_json = [chartTitle title, chartSubtitle subtitle, chartXaxis x Nothing (Just (1,6)), chartYaxis y Nothing (Just (1,6)), gridChart div_obj, chartLegend] ++ gridChartSeries igd
     graphPage title div_obj chart_json
 
 getExpLevelData :: ExpId -> Plate -> MType -> IO TimedPlotLinesData
