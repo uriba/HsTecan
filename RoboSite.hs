@@ -12,7 +12,7 @@ import Data.DateTime (toSeconds, DateTime)
 import System.FilePath (makeValid, (<.>))
 import Math.Combinatorics.Graph (combinationsOf)
 import RoboDB (ExpDesc(..), PlateDesc(..), WellDesc(..), DbMeasurement (..), readTable, DbReadable(..), dbConnectInfo, SelectCriteria(..))
-import RoboLib (Measurement(..), Well(..), wellFromInts, createExpData, ExpData, plotData, timedMesData, expMesTypes, ExpId, MType, mesToOdData, timedMesToOdData, plotIntensityGrid, smoothAll, bFiltS, intensityGridData, plotGridDataToStrings, plotLinesDataToStrings, Label, PlotGridData, ColonyId(..), wellStr, TimedPlotLinesData)
+import RoboLib (Measurement(..), Well(..), wellFromInts, createExpData, ExpData, plotData, timedMesData, expMesTypes, ExpId, MType, mesToOdData, timedMesToOdData, smoothAll, bFiltS, intensityGridData, plotGridDataToStrings, plotLinesDataToStrings, Label, PlotGridData, ColonyId(..), wellStr, TimedPlotLinesData)
 import qualified Data.Text as T
 import qualified Data.Map as M
 import qualified Data.ByteString.Lazy as BS
@@ -24,6 +24,7 @@ import HighChartsJson
 import Text.ParserCombinators.Parsec
 import Data.CSV
 import Data.Either.Utils
+import RoboAlg
 
 data GraphDesc = GraphDesc {gdExp :: ExpId, gdPlate :: Plate, gdMesType :: MType, gdExpDesc :: Maybe String, gdPlateDesc :: Maybe String} deriving (Show)
 
@@ -163,7 +164,7 @@ getGridGraph exp plate x y = do
     let div_obj = "container"
     let title = "Grid data of (" ++ x ++ ", " ++ y ++ ")"
     let subtitle = "Experiment: " ++ exp ++ ", Plate: " ++ plate
-    let chart_json = [chartTitle title, chartSubtitle subtitle, chartXaxis x Nothing (Just (1,6)), chartYaxis y Nothing (Just (1,6)), gridChart div_obj, chartLegend] ++ gridChartSeries igd
+    let chart_json = [chartTitle title, chartSubtitle subtitle, chartXaxis x Nothing Nothing, chartYaxis y Nothing Nothing, gridChart div_obj, chartLegend] ++ gridChartSeries igd
     graphPage title div_obj chart_json
 
 getExpLevelData :: ExpId -> Plate -> MType -> IO TimedPlotLinesData
@@ -215,6 +216,9 @@ getTransformedReadGraph f desc exp plate t = do
     let subtitle = "Experiment: " ++ exp ++ ", Plate: " ++ plate
     let chart_json = [chartTitle title, chartSubtitle subtitle, chartXaxis "Time" (Just "datetime") Nothing, chartYaxis t Nothing Nothing, lineChart div_obj, chartLegend] ++ linesChartSeries mpd
     graphPage title div_obj chart_json
+    --let fitdata = M.map (M.map (growthRate t)) mpd
+    --let fit = M.map (M.map (map (\(x,y) -> (1/((logBase 2 10) * x),y)) . expFit 7300)) fitdata
+    --liftIO $ putStrLn . show $ fit
 
 updateWellLabel :: ExpId -> Int -> Int -> Int -> String -> IO ()
 updateWellLabel eid p r c l = do

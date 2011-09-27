@@ -43,6 +43,7 @@ import Data.Map ((!), Map(..))
 import Data.Maybe
 import Statistics.Sample (mean, stdDev)
 import Data.DateTime (fromSeconds, toSqlString, DateTime, toSeconds)
+import RoboAlg
 import qualified Data.Vector.Unboxed as DVU
 import qualified Statistics.KernelDensity as KD
 import qualified Char as C
@@ -110,7 +111,7 @@ type MesTypeCorrectionVals = Map MType Double
 
 -- When subtracting background noise these are the minimal legal values.
 minValMap :: MesTypeCorrectionVals
-minValMap = M.fromList [("OD600",0.001), ("YFP", 1), ("MCHERRY",1),("CFP",1)]
+minValMap = M.fromList [("OD600",0.005), ("YFP", 10), ("MCHERRY",10),("CFP",10)]
 
 constantBackgroundMap :: ExpData -> MesTypeCorrectionVals
 constantBackgroundMap ed = M.fromList [(m, bg m) | m <- mes_types]
@@ -145,7 +146,7 @@ autoFluorescenceMap ed = do
 
 normalizePlate :: ExpData -> ExpData
 normalizePlate ed
-    | Nothing == M.lookup mediaId ed = ed
+    | Nothing == M.lookup mediaId ed = M.map (M.map (map (\x -> if mType x == "OD600" then x {mVal = max (minValMap ! "OD600") (mVal x - stdMinOd)} else x))) $ ed
     | otherwise = subtractConstantBackground ed
 
 changePlate :: Int -> Measurement -> Measurement
@@ -185,8 +186,8 @@ createExpData ms = M.fromList [ (label, m_for_label label) | label <- labels ms]
 	m_for_label l = M.fromList [ (colony_id, m_for_colony colony_id) | colony_id <- colonies l ms ]
 
 odLiveThreshold = 0.2
-odThreshold = 0.01
-stdMinOd = 0.045
+odThreshold = 0.005
+stdMinOd = 0.04
 
 verifySingleColony :: [Measurement] -> [Measurement]
 verifySingleColony ms
@@ -300,6 +301,14 @@ fileOpts fn = [ Custom "terminal" ["png", "size 1000,1000"], Custom "output" ["\
 type AxesTrans = ((Double -> Double),(Double -> Double))
 
 noTrans = (id,id)
+
+intensityGridData' :: ExpData -> (String,String) -> AxesTrans -> PlotGridData
+intensityGridData' ed (xtype,ytype) (fx,fy) = grid_points
+    where
+        ned = removeDeadWells . normalizePlate $ ed
+        exp_c m = maxGrowth . sortBy (compare `on` snd) . map (\x -> (mVal x,toSeconds . mTime $ x)) . filter (\x -> mType x == m)
+        exp_level mt ms = exp_c mt ms / exp_c "OD600" ms
+        grid_points = M.map (M.map (\x -> (exp_level xtype x,exp_level ytype $ x))) ned
 
 intensityGridData :: ExpData -> (String,String) -> AxesTrans -> PlotGridData
 intensityGridData ed (xtype,ytype) (fx,fy) = grid_points
