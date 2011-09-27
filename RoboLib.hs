@@ -306,8 +306,8 @@ intensityGridData' :: ExpData -> (String,String) -> AxesTrans -> PlotGridData
 intensityGridData' ed (xtype,ytype) (fx,fy) = grid_points
     where
         ned = removeDeadWells . normalizePlate $ ed
-        exp_c m = maxGrowth . sortBy (compare `on` snd) . map (\x -> (mVal x,toSeconds . mTime $ x)) . filter (\x -> mType x == m)
-        exp_level mt ms = exp_c mt ms / exp_c "OD600" ms
+        exp_c m = aExpLevel . sortBy (compare `on` snd) . map (\x -> (mVal x,toSeconds . mTime $ x)) . filter (\x -> mType x == m)
+        exp_level mt ms = exp_c mt ms
         grid_points = M.map (M.map (\x -> (exp_level xtype x,exp_level ytype $ x))) ned
 
 intensityGridData :: ExpData -> (String,String) -> AxesTrans -> PlotGridData
