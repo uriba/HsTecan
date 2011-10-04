@@ -23,7 +23,7 @@ module RoboLib (
     createExpData,
     ExpId,
     MType,
-    expLevel,
+    expLevel',
     noTrans,
     expMesTypes,
     smoothAll,
@@ -41,7 +41,7 @@ import Data.Function (on)
 import Data.List
 import Data.Map ((!), Map(..))
 import Data.Maybe
-import Statistics.Sample (mean, stdDev)
+import Math.Statistics (mean)
 import Data.DateTime (fromSeconds, toSqlString, DateTime, toSeconds)
 import RoboAlg
 import qualified Data.Vector.Unboxed as DVU
@@ -116,7 +116,7 @@ minValMap = M.fromList [("OD600",0.005), ("YFP", 10), ("MCHERRY",10),("CFP",10)]
 constantBackgroundMap :: ExpData -> MesTypeCorrectionVals
 constantBackgroundMap ed = M.fromList [(m, bg m) | m <- mes_types]
     where
-	bg m = meanL . map mVal . filterByType m $ bg_mes 
+	bg m = mean . map mVal . filterByType m $ bg_mes 
 	mes_types = mesTypes bg_mes
 	bg_mes = concat . filter (not . liveWell) . M.elems $ (ed ! mediaId)
 
@@ -133,15 +133,12 @@ mesTypes = nub . map mType
 expMesTypes :: ExpData -> [String]
 expMesTypes = nub . map mType . concat . concatMap M.elems . M.elems
 
-meanL :: [Double] -> Double
-meanL = mean . V.fromList
-
 autoFluorescenceMap :: ExpData -> Maybe MesTypeCorrectionVals
 autoFluorescenceMap ed = do
     af_colonies <- M.lookup wildTypeId ed
     let af_mes = M.elems af_colonies
     let mes_types = mesTypes . concat $ af_mes
-    let af m = meanL . map (expLevel m) $ af_mes
+    let af m = mean . map (expLevel' m) $ af_mes
     return . M.fromList $ [(m, af m) | m <- mes_types]
 
 normalizePlate :: ExpData -> ExpData
@@ -281,11 +278,13 @@ mesLimits mt ms = (low,high)
 	(low,high_od) = odLimits . valByTime "OD600" $ ms
 	high = min high_od . fromMaybe (high_od) . findIndex (>= maxMes) . valByTime mt $ ms
 
-expLevel :: MType -> [Measurement] -> Double
-expLevel mt = meanL . mesToOd mt Nothing
+expLevel' :: MType -> [Measurement] -> Double
+expLevel' mt = mean . mesToOd mt Nothing
 
 expLevels :: ExpData -> ExpLevelData
-expLevels ed = M.map (M.map (\x -> [(m,mesToOd m Nothing x) | m <- mesTypes x])) ed
+expLevels ed = M.map (M.map (\x -> [(m,if m == "OD600" then repeat . maxGrowth . od_mes $ x else mesToOd m Nothing x) | m <- mesTypes x])) ed
+    where
+        od_mes = sortBy (compare `on` snd) . map (\x -> (mVal x,toSeconds . mTime $ x)) . filter (\x -> mType x == "OD600")
 
 subtractAutoFluorescence :: ExpData -> ExpLevelData -- need adjustment for df/dt and maximum value selection
 subtractAutoFluorescence ed = M.map (M.map (map (\(mt,vals) -> (mt, map (corrected_el mt) vals)))) . expLevels $ ed
@@ -302,21 +301,30 @@ type AxesTrans = ((Double -> Double),(Double -> Double))
 
 noTrans = (id,id)
 
-intensityGridData' :: ExpData -> (String,String) -> AxesTrans -> PlotGridData
-intensityGridData' ed (xtype,ytype) (fx,fy) = grid_points
-    where
-        ned = removeDeadWells . normalizePlate $ ed
-        exp_c m = aExpLevel . sortBy (compare `on` snd) . map (\x -> (mVal x,toSeconds . mTime $ x)) . filter (\x -> mType x == m)
-        exp_level mt ms = exp_c mt ms
-        grid_points = M.map (M.map (\x -> (exp_level xtype x,exp_level ytype $ x))) ned
-
 intensityGridData :: ExpData -> (String,String) -> AxesTrans -> PlotGridData
 intensityGridData ed (xtype,ytype) (fx,fy) = grid_points
     where
-	data_sets = {-subtractAutoFluorescence . -}expLevels . removeDeadWells . normalizePlate $ ed
-	plot_vals = M.map (M.map (map (\(mt,vals) -> (mt, calcexp vals)))) data_sets
-	grid_points = M.map (M.map (\x -> (fx . fromJust . lookup xtype $ x,fy . fromJust . lookup ytype $ x))) plot_vals
-	calcexp = meanL . take 3 . drop 2 . reverse . sort
+        ned = removeDeadWells . normalizePlate $ ed
+        m_mes m = sortBy (compare `on` snd) . map (\x -> (mVal x,toSeconds . mTime $ x)) . filter (\x -> mType x == m)
+        exp_c m ms = expLevel (m_mes "OD600" ms) (m_mes m ms)
+        exp_level mt ms = exp_c mt ms
+        grid_points = M.map (M.map (\x -> (exp_level xtype x,exp_level ytype $ x))) ned
+
+growthGridData :: ExpData -> (String,String) -> AxesTrans -> PlotGridData
+growthGridData ed (xtype,ytype) (fx,fy) = grid_points
+    where
+        data_sets = {-subtractAutoFluorescence . -}expLevels . removeDeadWells . normalizePlate $ ed
+        plot_vals = M.map (M.map (map (\(mt,vals) -> (mt, calcexp . take 100 $ vals)))) data_sets
+        grid_points = M.map (M.map (\x -> (fx $ (fromJust . lookup xtype $ x) + (fromJust . lookup ytype $ x),fromJust . lookup "OD600" $ x))) plot_vals
+        calcexp = mean . take 3 . drop 2 . reverse . sort
+
+intensityGridData' :: ExpData -> (String,String) -> AxesTrans -> PlotGridData
+intensityGridData' ed (xtype,ytype) (fx,fy) = grid_points
+    where
+        data_sets = {-subtractAutoFluorescence . -}expLevels . removeDeadWells . normalizePlate $ ed
+        plot_vals = M.map (M.map (map (\(mt,vals) -> (mt, calcexp vals)))) data_sets
+        grid_points = M.map (M.map (\x -> (fx . fromJust . lookup xtype $ x,fy . fromJust . lookup ytype $ x))) plot_vals
+        calcexp = mean . take 3 . drop 2 . reverse . sort
 
 plotGrid :: String -> PlotGridData -> (String,String) -> Maybe FilePath -> IO ()
 plotGrid title pgd (xtype,ytype) m_fn = plotPathsStyle plot_attrs plot_lines
@@ -361,12 +369,12 @@ histDataDefRange :: Int -> [Double] -> [(Double,Double)]
 histDataDefRange pn d = histData (minimum d, maximum d) pn d
 
 -- Create a default Kernel Density histogram.
-kdHist :: Int -> [Double] -> [(Double,Double)]
-kdHist points_num dots = zip points_list values_list
-    where
-	(points,values) = KD.gaussianPDF points_num . DVU.fromList $ dots -- default KD
-	points_list = DVU.toList . KD.fromPoints $ points
-	values_list = DVU.toList values
+-- kdHist :: Int -> [Double] -> [(Double,Double)]
+-- kdHist points_num dots = zip points_list values_list
+--     where
+-- 	(points,values) = KD.gaussianPDF points_num . DVU.fromList $ dots -- default KD
+-- 	points_list = DVU.toList . KD.fromPoints $ points
+-- 	values_list = DVU.toList values
 
 
 ----------- smoothing
@@ -410,7 +418,7 @@ bFilt xs
 	where
 	    mx = maximum xs
 	    mn = minimum xs
-	    val = Just . meanL 
+	    val = Just . mean 
 	    relevant_data = filter (\x -> x < mx && x > mn) $ xs
 
 wellStr :: Well -> String

@@ -1,33 +1,30 @@
-module Fitting (Point,linFitWindow,expFitWindow)
+module Fitting (Point,linFitWindow,expFitWindow,FitData(..))
 where
-import qualified Data.Vector.Unboxed as U
-import RoboStat (linearRegressionRSqr)
+import Math.Statistics (linreg)
+import Data.List (tails)
 
-tails :: (U.Unbox a) => U.Vector a -> [U.Vector a]
-tails v
-    | U.null v = [U.empty]
-    | otherwise = v : (tails . U.tail $ v)
-
+data FitData = FitData { fdAlpha :: Double, fdBeta :: Double, fdRSqr :: Double, fdStart :: Double }
 type Point = (Double,Double)
-linFit :: U.Vector Point -> (Double,Double,Double)
-linFit = uncurry linearRegressionRSqr . U.unzip
 
-takeXRange :: Double -> U.Vector Point -> U.Vector Point
-takeXRange range pts = U.takeWhile in_range pts
+takeXRange :: Double -> [Point] -> [Point]
+takeXRange range pts = takeWhile in_range pts
     where
         in_range pt = fst pt - start_val < range
-        start_val = fst . U.head $ pts
+        start_val = fst . head $ pts
 
-linFitWindow :: Double -> U.Vector Point -> [(Double,Double,Double)]
-linFitWindow sec_wind pts = map linFit windows
+fitData :: [Point] -> FitData
+fitData pts = FitData { fdAlpha = a, fdBeta = b, fdRSqr = r*r, fdStart = start }
+    where
+        (b,a,r) = linreg . map (\(x,y) -> (x-start,y)) $ pts -- normialize points to start from 0.
+        start = fst . head $ pts
+
+linFitWindow :: Double -> [Point] -> [FitData]
+linFitWindow sec_wind pts = map fitData windows
     where
         windows = map (takeXRange sec_wind) . tails $ pts
 
-toLog :: U.Vector Point -> U.Vector Point
-toLog = U.map (\(x,y) -> (x,logBase 2 y))
+toLog :: [Point] -> [Point]
+toLog = map (\(x,y) -> (x,logBase 2 y))
 
-expFit :: U.Vector Point -> (Double,Double,Double)
-expFit = linFit . toLog
-
-expFitWindow :: Double -> U.Vector Point -> [(Double,Double,Double)]
+expFitWindow :: Double -> [Point] -> [FitData]
 expFitWindow w = linFitWindow w . toLog
