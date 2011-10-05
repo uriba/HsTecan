@@ -4,6 +4,7 @@ import Math.Statistics (linreg)
 import Data.List (tails)
 
 data FitData = FitData { fdAlpha :: Double, fdBeta :: Double, fdRSqr :: Double, fdStart :: Double }
+    deriving Show
 type Point = (Double,Double)
 
 takeXRange :: Double -> [Point] -> [Point]

@@ -11,7 +11,7 @@ import Data.Maybe (isJust, fromJust, fromMaybe)
 import Data.DateTime (toSeconds, DateTime)
 import System.FilePath (makeValid, (<.>))
 import Math.Combinatorics.Graph (combinationsOf)
-import RoboDB (ExpDesc(..), PlateDesc(..), WellDesc(..), DbMeasurement (..), readTable, DbReadable(..), dbConnectInfo, SelectCriteria(..))
+import RoboDB (ExpDesc(..), PlateDesc(..), WellDesc(..), DbMeasurement (..), readTable, DbReadable(..), dbConnectInfo, SelectCriteria(..), loadExpDataDB)
 import RoboLib (Measurement(..), Well(..), wellFromInts, createExpData, ExpData, plotData, timedMesData, expMesTypes, ExpId, MType, mesToOdData, timedMesToOdData, smoothAll, bFiltS, intensityGridData, plotGridDataToStrings, plotLinesDataToStrings, Label, PlotGridData, ColonyId(..), wellStr, TimedPlotLinesData)
 import qualified Data.Text as T
 import qualified Data.Map as M
@@ -37,25 +37,6 @@ dbToGraphDesc exp_descs plate_descs [SqlByteString exp_id, SqlInt32 p, SqlByteSt
     gdExpDesc = fmap edDesc . find (\x -> edExp x == toString exp_id) $ exp_descs,
     gdPlateDesc = fmap pdDesc . find (\x -> pdExp x == toString exp_id && pdPlate x == fromIntegral p) $ plate_descs
     }
-
-mesFromDB :: [WellDesc] -> [DbMeasurement] -> [Measurement]
-mesFromDB wds dbms = [ to_mes m | m <- dbms]
-    where
-        to_mes m = Measurement {
-            mExpDesc = dbmExpDesc m,
-            mPlate = dbmPlate m,
-            mType = dbmType m,
-            mTime = dbmTime m,
-            mWell = dbmWell m,
-            mLabel = fromMaybe (wellStr $ dbmWell m) . fmap wdDesc . find ((==) (dbmWell m) . wdWell) $ wds,
-            mVal = dbmVal m
-        }
-
-loadExpDataDB :: ExpId -> Int -> IO ExpData
-loadExpDataDB exp_id p = do
-    readings <- readTable "tecan_readings" (Just $ SelectCriteria "where exp_id = ? AND plate = ?" [toSql exp_id, toSql p])
-    well_labels <- readTable "tecan_labels" (Just $ SelectCriteria "where exp_id = ? AND plate = ?" [toSql exp_id, toSql p])
-    return . createExpData . mesFromDB well_labels $ readings
 
 loadExps :: IO [GraphDesc]
 loadExps = do

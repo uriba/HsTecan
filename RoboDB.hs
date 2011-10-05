@@ -6,7 +6,9 @@ module RoboDB (
     WellDesc(..),
     SelectCriteria(..),
     readTable,
-    dbConnectInfo
+    dbConnectInfo,
+    mesFromDB,
+    loadExpDataDB
     )
 where
 import Database.HDBC.MySQL
@@ -15,7 +17,8 @@ import Data.ByteString.UTF8 (toString)
 import Data.Function (on)
 import Data.Maybe (fromMaybe)
 import Data.DateTime (fromSeconds, DateTime)
-import RoboLib (ExpId, Well(..), wellFromInts, Measurement(..), MType)
+import RoboLib (ExpId, Well(..), wellFromInts, Measurement(..), MType,createExpData, ExpData (..),wellStr)
+import Data.List (find)
 
 dbConnectInfo = MySQLConnectInfo {
     mysqlHost = "132.77.80.238",
@@ -89,3 +92,21 @@ readTable t_name msc = do
     entries <-  quickQuery' conn ("SELECT * FROM " ++ t_name ++ " " ++ where_clause) where_params
     return . map dbRead $ entries
 
+loadExpDataDB :: ExpId -> Int -> IO ExpData
+loadExpDataDB exp_id p = do
+    readings <- readTable "tecan_readings" (Just $ SelectCriteria "where exp_id = ? AND plate = ?" [toSql exp_id, toSql p])
+    well_labels <- readTable "tecan_labels" (Just $ SelectCriteria "where exp_id = ? AND plate = ?" [toSql exp_id, toSql p])
+    return . createExpData . mesFromDB well_labels $ readings
+
+mesFromDB :: [WellDesc] -> [DbMeasurement] -> [Measurement]
+mesFromDB wds dbms = [ to_mes m | m <- dbms]
+    where
+        to_mes m = Measurement {
+            mExpDesc = dbmExpDesc m,
+            mPlate = dbmPlate m,
+            mType = dbmType m,
+            mTime = dbmTime m,
+            mWell = dbmWell m,
+            mLabel = fromMaybe (wellStr $ dbmWell m) . fmap wdDesc . find ((==) (dbmWell m) . wdWell) $ wds,
+            mVal = dbmVal m
+        }
