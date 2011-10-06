@@ -31,6 +31,7 @@ module RoboLib (
     has,
     Label,
     wellStr,
+    normalizePlate
     )
 where
 import Graphics.Gnuplot.Simple
@@ -111,7 +112,7 @@ type MesTypeCorrectionVals = Map MType Double
 
 -- When subtracting background noise these are the minimal legal values.
 minValMap :: MesTypeCorrectionVals
-minValMap = M.fromList [("OD600",0.005), ("YFP", 10), ("MCHERRY",10),("CFP",10)]
+minValMap = M.fromList [("OD600",0.005), ("YFP", 20), ("MCHERRY",10),("CFP",10), ("GFP",10)]
 
 constantBackgroundMap :: ExpData -> MesTypeCorrectionVals
 constantBackgroundMap ed = M.fromList [(m, bg m) | m <- mes_types]
