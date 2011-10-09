@@ -28,4 +28,4 @@ toLog :: [Point] -> [Point]
 toLog = map (\(x,y) -> (x,logBase 2 y))
 
 expFitWindow :: Double -> [Point] -> [FitData]
-expFitWindow w = linFitWindow w . toLog
+expFitWindow w = filter (\x -> not . isNaN . fdAlpha $ x) . linFitWindow w . toLog
