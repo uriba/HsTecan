@@ -307,7 +307,7 @@ intensityGridData ed (xtype,ytype) (fx,fy) = grid_points
     where
         ned = removeDeadWells . normalizePlate $ ed
         m_mes m = sortBy (compare `on` snd) . map (\x -> (mVal x,toSeconds . mTime $ x)) . filter (\x -> mType x == m)
-        exp_c m ms = expLevel (m_mes "OD600" ms) (m_mes m ms)
+        exp_c m ms = expLevelEst (m_mes "OD600" ms) (m_mes m ms)
         exp_level mt ms = exp_c mt ms
         grid_points = M.map (M.map (\x -> (exp_level xtype x,exp_level ytype $ x))) ned
 

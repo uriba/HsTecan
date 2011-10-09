@@ -29,8 +29,10 @@ displayLoop :: ExpData -> String -> PlotHandle -> IO ()
 displayLoop ed wd h = do
     let w = Well {wRow = head wd, wColumn = read . tail $ wd}
     let mes = snd . fromJust . L.find (\(cid,_) -> cWell cid ==  w) $ concatMap M.toList . M.elems $ ed
-    let od_pts = normalizeTime . toPts "OD600" $ mes
-    let yf_pts = normalizeTime . toPts "MCHERRY" $ mes
+    let ods = toPts "OD600" $ mes
+    let yfs = toPts "YFP" $ mes
+    let od_pts = normalizeTime ods
+    let yf_pts = normalizeTime yfs
     let mc_pts = toPts "MCHERRY" mes
     let ods = V.fromList . map snd $ od_pts
     let log_ods = map (\(x,y) -> (x,logBase 2 y)) $ od_pts
@@ -41,7 +43,7 @@ displayLoop ed wd h = do
     let yf_betas = normVals . map (\(x,y) -> (x,fdBeta y)) $ yf_fits
     let od_alphas = normVals . map (\(x,y) -> (x,fdAlpha y)) $ od_fits
     let od_betas = normVals . map (\(x,y) -> (x,fdBeta y)) $ od_fits
-    let yf_exp = normVals $ zipWith (\(x1,y1) (x2,y2) -> (x1,fdBeta y1 - fdBeta y2)) yf_fits od_fits
+    let yf_exp = normVals $ expLevelsF od_pts yf_pts-- zipWith (\(x1,y1) (x2,y2) -> (x1,fdBeta y1 - fdBeta y2)) yf_fits od_fits
     withPlotHandle h $ do
         withTitle $ setText . wellStr $ w
         setPlots 2 2
@@ -104,12 +106,12 @@ displayLoop ed wd h = do
         else displayLoop ed next h
 
 main = do
-    ed <- loadExpDataDB "2011-09-27 17:07:57" 0
+    --ed <- loadExpDataDB "2011-09-27 17:07:57" 0
     --ed <- loadExpDataDB "2011-10-05 17:55:38" 2
-    --ed <- loadExpDataDB "2011-09-08 17:37:00" 6
+    ed <- loadExpDataDB "2011-09-08 17:37:00" 6
     let edn = normalizePlate ed
     if (length . M.elems $ edn) == 0
         then return ()
         else do
             h <- display $ withTitle $ setText "my title"
-            displayLoop edn "a1" h
+            displayLoop edn "b2" h
