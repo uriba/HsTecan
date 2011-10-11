@@ -1,0 +1,7 @@
+<p>Enter new label
+<form enctype="#{enctype}" action=@{UpdateLabel eid (fromMaybe "-1" mp)}>
+    <table>
+        ^{widget}
+        <tr>
+            <td colspan="2">
+                <input type="submit" value="Update">

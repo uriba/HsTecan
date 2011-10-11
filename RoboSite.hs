@@ -1,5 +1,7 @@
 {-# LANGUAGE TypeFamilies, QuasiQuotes, MultiParamTypeClasses, TemplateHaskell, OverloadedStrings, TypeSynonymInstances, OverlappingInstances #-}
 import Yesod
+import Text.Hamlet
+import Text.Julius
 import Yesod.Form.Fields (fileAFormReq)
 import Yesod.Form.Jquery
 import Database.HDBC.MySQL
@@ -50,21 +52,7 @@ data RoboSite = RoboSite
 type Plate = String
 type GraphType = String
 
-mkYesod "RoboSite" [$parseRoutes|
-/RoboSite HomeR GET
-/RoboSite/update/#ExpId/ UpdateExpForm GET
-/RoboSite/update/#ExpId/#Plate/ UpdatePlateForm GET
-/RoboSite/upload/#ExpId/#Plate/ UploadPlateDesc GET
-/RoboSite/uploaded/#ExpId/#Plate/ UploadedPlateDesc POST
-/RoboSite/updated/#ExpId/#Plate/ UpdateLabel GET
-/RoboSite/graph/#ExpId/#Plate/#GraphType/Read ReadGraph GET
-/RoboSite/graph/#ExpId/#Plate/#GraphType/LogRead LogReadGraph GET
-/RoboSite/data/#ExpId/#Plate/#GraphType/Read ReadGraphCSV GET
-/RoboSite/graph/#ExpId/#Plate/#GraphType/Exp ExpLevelGraph GET
-/RoboSite/data/#ExpId/#Plate/#GraphType/Exp ExpLevelCSV GET
-/RoboSite/graph/#ExpId/#Plate/#GraphType/#GraphType/Exp GridGraph GET
-/RoboSite/data/#ExpId/#Plate/#GraphType/#GraphType/Exp GridGraphCSV GET
-|]
+mkYesod "RoboSite" $(parseRoutesFile "RoboRoutes")
 
 instance Yesod RoboSite where
     approot _ = ""
@@ -80,12 +68,7 @@ uploadPlateDesc = renderTable $ pure (,) <*> fileAFormReq "CSV file to upload:"
 getUploadPlateDesc :: String -> String -> Handler RepHtml
 getUploadPlateDesc eid p = do
     ((_,widget),enctype) <- generateFormPost uploadPlateDesc
-    defaultLayout [$whamlet|
-    <p> Upload plate wells description file
-    <form method=post action=@{UploadedPlateDesc eid p} enctype=#{enctype}>
-        ^{widget}
-        <input type=submit>
-|]
+    defaultLayout $(whamletFile "UploadPlateCsv.whamlet")
 
 updatePlateLabels :: ExpId -> Int -> [[String]] -> IO ()
 updatePlateLabels eid p labels = sequence_ update_labels
@@ -106,26 +89,9 @@ graphPage :: String -> String -> [(String,J.JSValue)] -> Handler RepHtml
 graphPage title div chart_json = do
     let json_data = J.encode . J.makeObj $ chart_json
     defaultLayout $ do
-        setTitle "Graph"
-        addJulius [$julius|
-        </script>
-        <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.6.1/jquery.min.js"></script>
-        <script type="text/javascript" src="/js/highcharts.js"></script> 
-        <script type="text/javascript" src="/js/modules/exporting.js"></script> 
-        
-        <!-- 2. Add the JavaScript to initialize the chart on document ready --> 
-        <script type="text/javascript"> 
-            Highcharts.setOptions({global: {useUTC: false}});
-            var chart;
-            $(document).ready(function() {
-                chart = new Highcharts.Chart(#{json_data});
-            });
-|]
-
-        addHamlet [$hamlet|
-<h1> #{title}
-<div ##{div} style="width: 1100px; height: 800px; margin: 0 auto">
-|]
+        setTitle title -- "Graph"
+        addJulius $(juliusFile "HighChartsGraph.julius")
+        addHamlet $(hamletFile "GraphPage.hamlet")
 
 getGridGraphData :: ExpId -> Plate -> MType -> MType -> IO PlotGridData
 getGridGraphData exp plate x y = do
@@ -250,15 +216,7 @@ getUpdateLabel eid p = do
 updateForm :: ExpId -> Maybe Plate -> Handler RepHtml
 updateForm eid mp = do
     ((_, widget), enctype) <- generateFormGet $ labelUpdateForm
-    defaultLayout [$whamlet|
-<p>Enter new label
-<form enctype="#{enctype}" action=@{UpdateLabel eid (fromMaybe "-1" mp)}>
-    <table>
-        ^{widget}
-        <tr>
-            <td colspan="2">
-                <input type="submit" value="Update">
-|]
+    defaultLayout $(whamletFile "UpdateLabelForm.whamlet")
 
 plates :: ExpId -> [GraphDesc] -> [(Plate,Maybe String)]
 plates eid gds = nub [(gdPlate x, gdPlateDesc x) | x <- gds, gdExp x == eid]
@@ -281,81 +239,8 @@ getHomeR = do
     let exp_ids = nub . map gdExp $ disp_data
     defaultLayout $ do
         setTitle "Robosite"
-        addHamlet [$hamlet|
-<h1> Welcome to the Robosite
-<h2> experiments list:
-<ul>
-    $forall exp <- exp_descs
-        <li>
-            <a href="#" onclick="toggleDisplay('#{fst exp}');">
-                $maybe desc <- snd exp
-                    #{fst exp}: #{desc}
-                $nothing
-                    #{fst exp}
-            \ #
-            <a href=@{UpdateExpForm (fst exp)}>
-                [Update label]
-            <div ##{fst exp} style="display: none;">
-                <ul>
-                   $forall plate <- plates (fst exp) disp_data
-                       <li>
-                            <a href="#" onclick="toggleDisplay('#{fst exp}#{fst plate}');">
-                                $maybe desc <- snd plate
-                                    Plate #{fst plate}: #{desc}
-                                $nothing
-                                    Plate #{fst plate}
-                            \ #
-                            <a href=@{UpdatePlateForm (fst exp) (fst plate)}>
-                                [Update label]
-                            <a href=@{UploadPlateDesc (fst exp) (fst plate)}>
-                                [Upload well labels]
-                            <div ##{fst exp}#{fst plate} style="display: none;">
-                                <ul>
-                                    <li>
-                                        Raw sensor readings
-                                        <ul>
-                                            $forall mtype <- readings (fst exp) (fst plate) disp_data
-                                                <li>
-                                                    <a href=@{ReadGraph (fst exp) (fst plate) mtype}>
-                                                        #{mtype}
-                                                    \ #
-                                                    <a href=@{LogReadGraph (fst exp) (fst plate) mtype}>
-                                                        Log scale #{mtype}
-                                                    \ #
-                                                    <a href=@{ReadGraphCSV (fst exp) (fst plate) mtype}>
-                                                        [Get data]
-                                    <li>
-                                        Expression levels
-                                        <ul>
-                                            $forall mtype <- expLevels (fst exp) (fst plate) disp_data
-                                                <li>
-                                                    <a href=@{ExpLevelGraph (fst exp) (fst plate) mtype}>
-                                                        #{mtype}
-                                                    \ #
-                                                    <a href=@{ExpLevelCSV (fst exp) (fst plate) mtype}>
-                                                        [Get data]
-                                    <li>
-                                        Grids
-                                        <ul>
-                                            $forall grid <- grids (fst exp) (fst plate) disp_data
-                                                <li>
-                                                    <a href=@{GridGraph (fst exp) (fst plate) (fst grid) (snd grid)}>
-                                                        #{fst grid},#{snd grid}
-                                                    \ #
-                                                    <a href=@{GridGraphCSV (fst exp) (fst plate) (fst grid) (snd grid)}>
-                                                        [Get data]
-|]
-        addJulius [$julius|
-function toggleDisplay(element_name) {
-  document.getElementById(element_name).style.visibility = "visible";
-  if(document.getElementById(element_name).style.display == "none" ) {
-    document.getElementById(element_name).style.display = "";
-  }
-  else {
-    document.getElementById(element_name).style.display = "none";
-  }
-}
-|]
+        addHamlet $(hamletFile "RoboSiteMain.hamlet")
+        addJulius $(juliusFile "RoboSiteMain.julius")
 
 main = do
     warpDebug 3000 RoboSite

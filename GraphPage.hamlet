@@ -1,0 +1,2 @@
+<h1> #{title}
+<div ##{div} style="width: 1100px; height: 800px; margin: 0 auto">

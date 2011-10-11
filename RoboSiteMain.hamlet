@@ -1,0 +1,62 @@
+<h1> Welcome to the Robosite
+<h2> experiments list:
+<ul>
+    $forall exp <- exp_descs
+        <li>
+            <a href="#" onclick="toggleDisplay('#{fst exp}');">
+                $maybe desc <- snd exp
+                    #{fst exp}: #{desc}
+                $nothing
+                    #{fst exp}
+            \ #
+            <a href=@{UpdateExpForm (fst exp)}>
+                [Update label]
+            <div ##{fst exp} style="display: none;">
+                <ul>
+                   $forall plate <- plates (fst exp) disp_data
+                       <li>
+                            <a href="#" onclick="toggleDisplay('#{fst exp}#{fst plate}');">
+                                $maybe desc <- snd plate
+                                    Plate #{fst plate}: #{desc}
+                                $nothing
+                                    Plate #{fst plate}
+                            \ #
+                            <a href=@{UpdatePlateForm (fst exp) (fst plate)}>
+                                [Update label]
+                            <a href=@{UploadPlateDesc (fst exp) (fst plate)}>
+                                [Upload well labels]
+                            <div ##{fst exp}#{fst plate} style="display: none;">
+                                <ul>
+                                    <li>
+                                        Raw sensor readings
+                                        <ul>
+                                            $forall mtype <- readings (fst exp) (fst plate) disp_data
+                                                <li>
+                                                    <a href=@{ReadGraph (fst exp) (fst plate) mtype}>
+                                                        #{mtype}
+                                                    \ #
+                                                    <a href=@{LogReadGraph (fst exp) (fst plate) mtype}>
+                                                        Log scale #{mtype}
+                                                    \ #
+                                                    <a href=@{ReadGraphCSV (fst exp) (fst plate) mtype}>
+                                                        [Get data]
+                                    <li>
+                                        Expression levels
+                                        <ul>
+                                            $forall mtype <- expLevels (fst exp) (fst plate) disp_data
+                                                <li>
+                                                    <a href=@{ExpLevelGraph (fst exp) (fst plate) mtype}>
+                                                        #{mtype}
+                                                    \ #
+                                                    <a href=@{ExpLevelCSV (fst exp) (fst plate) mtype}>
+                                                        [Get data]
+                                    <li>
+                                        Grids
+                                        <ul>
+                                            $forall grid <- grids (fst exp) (fst plate) disp_data
+                                                <li>
+                                                    <a href=@{GridGraph (fst exp) (fst plate) (fst grid) (snd grid)}>
+                                                        #{fst grid},#{snd grid}
+                                                    \ #
+                                                    <a href=@{GridGraphCSV (fst exp) (fst plate) (fst grid) (snd grid)}>
+                                                        [Get data]

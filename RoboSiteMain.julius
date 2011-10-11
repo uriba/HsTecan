@@ -1,0 +1,9 @@
+function toggleDisplay(element_name) {
+  document.getElementById(element_name).style.visibility = "visible";
+  if(document.getElementById(element_name).style.display == "none" ) {
+    document.getElementById(element_name).style.display = "";
+  }
+  else {
+    document.getElementById(element_name).style.display = "none";
+  }
+}

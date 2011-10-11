@@ -1,0 +1,13 @@
+/RoboSite HomeR GET
+/RoboSite/update/#ExpId/ UpdateExpForm GET
+/RoboSite/update/#ExpId/#Plate/ UpdatePlateForm GET
+/RoboSite/upload/#ExpId/#Plate/ UploadPlateDesc GET
+/RoboSite/uploaded/#ExpId/#Plate/ UploadedPlateDesc POST
+/RoboSite/updated/#ExpId/#Plate/ UpdateLabel GET
+/RoboSite/graph/#ExpId/#Plate/#GraphType/Read ReadGraph GET
+/RoboSite/graph/#ExpId/#Plate/#GraphType/LogRead LogReadGraph GET
+/RoboSite/data/#ExpId/#Plate/#GraphType/Read ReadGraphCSV GET
+/RoboSite/graph/#ExpId/#Plate/#GraphType/Exp ExpLevelGraph GET
+/RoboSite/data/#ExpId/#Plate/#GraphType/Exp ExpLevelCSV GET
+/RoboSite/graph/#ExpId/#Plate/#GraphType/#GraphType/Exp GridGraph GET
+/RoboSite/data/#ExpId/#Plate/#GraphType/#GraphType/Exp GridGraphCSV GET

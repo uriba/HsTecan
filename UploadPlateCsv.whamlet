@@ -1,0 +1,4 @@
+<p> Upload plate wells description file
+<form method=post action=@{UploadedPlateDesc eid p} enctype=#{enctype}>
+    ^{widget}
+    <input type=submit>

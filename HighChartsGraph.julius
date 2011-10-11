@@ -1,0 +1,12 @@
+</script>
+<script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.6.1/jquery.min.js"></script>
+<script type="text/javascript" src="/js/highcharts.js"></script> 
+<script type="text/javascript" src="/js/modules/exporting.js"></script> 
+
+<!-- 2. Add the JavaScript to initialize the chart on document ready --> 
+<script type="text/javascript"> 
+    Highcharts.setOptions({global: {useUTC: false}});
+    var chart;
+    $(document).ready(function() {
+        chart = new Highcharts.Chart(#{json_data});
+    });
