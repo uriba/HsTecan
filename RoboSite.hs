@@ -89,7 +89,7 @@ graphPage :: String -> String -> [(String,J.JSValue)] -> Handler RepHtml
 graphPage title div chart_json = do
     let json_data = J.encode . J.makeObj $ chart_json
     defaultLayout $ do
-        setTitle title -- "Graph"
+        setTitle "Graph"
         addJulius $(juliusFile "HighChartsGraph.julius")
         addHamlet $(hamletFile "GraphPage.hamlet")
 
