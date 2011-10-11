@@ -1,4 +1,5 @@
 import RoboLib
+import GnuPlotUtils
 import System (getArgs)
 import System.Console.GetOpt
 import Data.Maybe

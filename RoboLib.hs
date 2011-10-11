@@ -3,11 +3,6 @@ module RoboLib (
     ColonyId (..),
     wellFromInts,
     Measurement (..),
-    plotIntensityGrid,
-    plotMesToOD,
-    plotMesData,
-    plotData,
-    plotGrid,
     mesData,
     timedMesData,
     mesToOdData,
@@ -31,10 +26,10 @@ module RoboLib (
     has,
     Label,
     wellStr,
+    AxesTrans,
     normalizePlate
     )
 where
-import Graphics.Gnuplot.Simple
 import Text.ParserCombinators.Parsec
 import Data.CSV
 import Data.Either (rights)
@@ -202,31 +197,14 @@ mesByTime mt = sortBy (compare `on` mTime) . filterByType mt . verifySingleColon
 valByTime :: MType -> [Measurement] -> [Double]
 valByTime mt = map mVal . mesByTime mt
 
-makePlotData :: (String, [[Double]]) -> Int -> [(PlotStyle, [Double])]
-makePlotData (desc, vals) c = [ (defaultStyle {lineSpec = CustomStyle [LineTitle desc, LineType c]},x) | x <- vals ]
-
-makePlotGridData :: (String,[(Double,Double)]) -> Int -> (PlotStyle, [(Double,Double)])
-makePlotGridData (label,points) c =
-    (defaultStyle {plotType = Points, lineSpec = CustomStyle [LineTitle label, PointType c, PointSize 2]},points)
-
 has :: (Eq a) => [a] -> a -> Bool
 has = flip elem
-
-plotData :: String -> PlotLinesData -> Maybe FilePath -> IO ()
-plotData title pld m_fn = do
-    let by_label = [ (label, M.elems x) | (label,x) <- M.toList pld ]
-    let plot_data = concat . zipWith makePlotData by_label $ [1..]
-    let fileoptions = fromMaybe [] . fmap fileOpts $ m_fn
-    plotListsStyle ([Title title] ++ fileoptions) plot_data
 
 timedMesData :: ExpData -> MType -> TimedPlotLinesData
 timedMesData ed mt = M.map (M.map (map (\x -> (mVal x, mTime x)) . mesByTime mt)) (normalizePlate ed)
 
 mesData :: ExpData -> MType -> PlotLinesData
 mesData ed mt = M.map (M.map (map fst)) . timedMesData ed $ mt
-
-plotMesData :: ExpData -> MType -> Maybe FilePath -> IO()
-plotMesData ed  mt m_fn = plotData mt (mesData ed mt) m_fn
 
 mesToOd :: MType -> Maybe (Int,Int) -> [Measurement] -> [Double]
 mesToOd mt m_range ms = map fst . timedMesToOd mt m_range $ ms
@@ -257,9 +235,6 @@ timedMesToOdData ed mt m_range = M.map (M.map (removeIllegalPoints . map (\(x,y)
 mesToOdData :: ExpData -> MType -> Maybe (Int, Int) -> PlotLinesData
 mesToOdData ed mt m_range = M.map (M.map (map fst)) . timedMesToOdData ed mt $ m_range
 	
-plotMesToOD :: ExpData -> MType -> Maybe (Int, Int) -> Maybe FilePath -> IO()
-plotMesToOD ed mt m_range m_fn = plotData (mt ++ " to OD") (mesToOdData ed mt m_range) m_fn
-
 minIdx :: (Ord a) => [a] -> Int
 minIdx xs = fromJust . findIndex ((==) . minimum $ xs) $ xs
 
@@ -295,9 +270,6 @@ subtractAutoFluorescence ed = M.map (M.map (map (\(mt,vals) -> (mt, map (correct
 	    af <- M.lookup mt afm
 	    return $ max (minValMap ! mt) (x - af)
 
-fileOpts :: String -> [Attribute]
-fileOpts fn = [ Custom "terminal" ["png", "size 1000,1000"], Custom "output" ["\"" ++ fn ++ "\""]]
-
 type AxesTrans = ((Double -> Double),(Double -> Double))
 
 noTrans = (id,id)
@@ -326,19 +298,6 @@ intensityGridData' ed (xtype,ytype) (fx,fy) = grid_points
         plot_vals = M.map (M.map (map (\(mt,vals) -> (mt, calcexp vals)))) data_sets
         grid_points = M.map (M.map (\x -> (fx . fromJust . lookup xtype $ x,fy . fromJust . lookup ytype $ x))) plot_vals
         calcexp = mean . take 3 . drop 2 . reverse . sort
-
-plotGrid :: String -> PlotGridData -> (String,String) -> Maybe FilePath -> IO ()
-plotGrid title pgd (xtype,ytype) m_fn = plotPathsStyle plot_attrs plot_lines
-    where
-	file_options = fromMaybe [] . fmap fileOpts $ m_fn
-	plot_attrs = [XLabel xtype, YLabel ytype, XRange (0,7), YRange (0,7)] ++ file_options
-	labeled_grid_points = [ (label,M.elems pm) | (label,pm) <- M.toList pgd ]
-	plot_lines = zipWith makePlotGridData labeled_grid_points [1..]
-
-plotIntensityGrid :: ExpData -> (String, String) -> AxesTrans -> Maybe FilePath -> IO ()
-plotIntensityGrid ed axes fs m_fn = plotGrid "Log scale grid plot" pgd axes m_fn
-    where
-	pgd = intensityGridData ed axes fs
 
 filterBy :: (Eq b) => (a -> b) -> b -> [a] -> [a]
 filterBy f v = filter ((==) v . f)
@@ -424,4 +383,3 @@ bFilt xs
 
 wellStr :: Well -> String
 wellStr w = concat ["(", [wRow w],",",show . wColumn $ w,")"]
-
