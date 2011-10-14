@@ -1,4 +1,12 @@
-module Fitting (Point,SampleData,linFitWindow,expFitWindow,FitData(..))
+{-# LANGUAGE FlexibleContexts #-}
+module Fitting (
+    Point,
+    SampleData,
+    linFitWindow,
+    expFitWindow,
+    FitData(..),
+    toLog
+)
 where
 import Statistics.LinearRegression (linearRegressionRSqr)
 import Data.Vector.Unboxed (Vector)
@@ -30,7 +38,7 @@ linFitWindow sec_wind pts = map fitData windows
     where
         windows = map (takeXRange sec_wind) . LL.tails $ pts
 
-toLog :: SampleData -> SampleData
+toLog :: (LL.ListLike full (Double,Double)) => full -> full
 toLog = LL.map (\(x,y) -> (x,logBase 2 y))
 
 expFitWindow :: Double -> SampleData -> [FitData]

@@ -5,6 +5,7 @@ import RoboLib
 import qualified Data.List as L
 import qualified Data.Map as M
 import qualified Data.Packed.Vector as V
+import qualified Data.Vector.Unboxed as U
 import Data.DateTime
 import Data.Function
 import Data.Maybe
@@ -36,21 +37,20 @@ displayLoop ed wd h = do
     let od_pts = normalizeTime ods
     let yf_pts = normalizeTime yfs
     let mc_pts = normalizeTime mcs
-    let ods = V.fromList . map snd $ od_pts
-    let log_ods = map (\(x,y) -> (x,logBase 2 y)) $ od_pts
-    let log_yfp = map (\(x,y) -> (x,logBase 2 y)) $ yf_pts
-    let log_mch = map (\(x,y) -> (x,logBase 2 y)) $ mc_pts
-    let od_fits = zip (map fst od_pts) $ expFitWindow 2.01 od_pts
-    let yf_fits = zip (map fst yf_pts) $ expFitWindow 2.01 yf_pts
-    let mc_fits = zip (map fst mc_pts) $ expFitWindow 2.01 mc_pts
+    let log_ods = toLog od_pts
+    let log_yfp = toLog yf_pts
+    let log_mch = toLog mc_pts
+    let od_fits = zip (map fst od_pts) . expFitWindow 2.01 . U.fromList $ od_pts
+    let yf_fits = zip (map fst yf_pts) . expFitWindow 2.01 . U.fromList $ yf_pts
+    let mc_fits = zip (map fst mc_pts) . expFitWindow 2.01 . U.fromList $ mc_pts
     let yf_alphas = normVals . map (\(x,y) -> (x,fdAlpha y)) $ yf_fits
     let yf_betas = normVals . map (\(x,y) -> (x,fdBeta y)) $ yf_fits
     let od_alphas = normVals . map (\(x,y) -> (x,fdAlpha y)) $ od_fits
     let od_betas = normVals . map (\(x,y) -> (x,fdBeta y)) $ od_fits
     let mc_alphas = normVals . map (\(x,y) -> (x,fdAlpha y)) $ mc_fits
     let mc_betas = normVals . map (\(x,y) -> (x,fdBeta y)) $ mc_fits
-    let yf_exp = normVals $ expLevelsBestGRCorrelation od_pts yf_pts
-    let mc_exp = normVals $ expLevelsBestGRCorrelation od_pts mc_pts
+    let yf_exp = normVals $ (expLevelsBestGRCorrelation `on` U.fromList) od_pts yf_pts
+    let mc_exp = normVals $ (expLevelsBestGRCorrelation `on` U.fromList) od_pts mc_pts
     withPlotHandle h $ do
         withTitle $ setText . wellStr $ w
         setPlots 2 2
