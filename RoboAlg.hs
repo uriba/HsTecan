@@ -1,49 +1,50 @@
-module RoboAlg (linFitWindow, expFitWindow, maxGrowth, doublingTime, expLevelEst, expLevelsN,expLevelsF)
+module RoboAlg (mean, linFitWindow, expFitWindow, maxGrowth, doublingTime, expLevelEst, expLevelsN,expLevelsBestGRCorrelation)
 where
 import Data.Function (on)
 import Data.List (maximumBy, sortBy, tails, elemIndex)
 import Data.Maybe (catMaybes,fromMaybe,fromJust)
 import Data.Tuple.Utils (fst3,snd3,thd3)
 import Fitting
-import Math.Statistics
+import qualified Data.Vector.Unboxed as U
+import qualified Statistics.Sample as S
 
 type Seconds = Integer
+
+mean :: [Double] -> Double
+mean = S.mean . U.fromList
+
 twoHoursWindow = 2 * 3600 + 60 -- to make sure the window includes the last measurement
 
-toPoints :: [(Double,Seconds)] -> [Point]
-toPoints = map (\(val,secs) -> (fromIntegral secs,val))
+toPoints :: [(Double,Seconds)] -> SampleData
+toPoints = U.fromList . map (\(val,secs) -> (fromIntegral secs,val))
 
 maxGrowth :: [(Double, Seconds)] -> Double
 maxGrowth ms = maximum $ 0.00001 : (map fdAlpha . filter (\fd -> fdRSqr fd > 0.95) . expFitWindow twoHoursWindow . toPoints $ ms)
 
+-- Alternatives are:
+-- take the maximal growth rate and use it's calculated expression level.
+-- pick a window with highest growth rate of OD/Fl and calculate the expression level on these windows.
 expLevelEst :: [(Double,Seconds)] -> [(Double,Seconds)]-> Double
-expLevelEst ods ms =  mean . map snd . take 3 . drop 2 . reverse . sortBy (compare `on` fst) . expLevelsF od_pts $ ms_pts
--- thd3 . maximumBy (compare `on` fst3) . filter (\(x,y,z) -> not . isNaN $ x*y*z) $ els
--- snd . maximumBy (compare `on` fst) . filter (not . isNaN . snd) $ (catMaybes $ zipWith exp_level ms_fit ods_fit)
+expLevelEst ods ms =  mean . map snd . take 3 . drop 2 . reverse . sortBy (compare `on` fst) . expLevelsBestGRCorrelation od_pts $ ms_pts
     where
         od_pts = toPoints ods
         ms_pts = toPoints ms
         ods_fit = expFitWindow twoHoursWindow od_pts
         ms_fit = expFitWindow twoHoursWindow ms_pts
-        -- od_wind = highestGrowthRateWindow 5 ods_fit
-        -- fl_wind = highestGrowthRateWindow 5 ms_fit
-        -- el = mean . map snd . zipWith expLevel od_wind $ fl_wind
-        -- els = map (\(a,b,c,d) -> (b,c,d)) . expLevels' ods_fit $ ms_fit
-        -- exp_level od fl = if fdRSqr od < 0.9 || fdRSqr fl < 0.9 then Nothing else Just (fdAlpha od,snd . expLevel od $ fl)
 
 alphas :: [FitData] -> [Double]
 alphas = map fdAlpha
 
-expLevelsF :: [Point] -> [Point]-> [(Double,Double)]
-expLevelsF ods mss = map (\(a,b,c,d) -> (a,d)) . expLevels' ods_fit $ ms_fit
+expLevelsBestGRCorrelation :: SampleData -> SampleData -> [(Double,Double)]
+expLevelsBestGRCorrelation ods mss = map (\(a,b,c,d) -> (a,d)) . expLevelsBestGRCorrelation' ods_fit $ ms_fit
     where
         ods_fit = expFitWindow twoHoursWindow ods
         ms_fit = expFitWindow twoHoursWindow mss
 
-expLevels' :: [FitData] -> [FitData] -> [(Double,Double,Double,Double)]
-expLevels' _ [] = []
-expLevels' [] _ = []
-expLevels' odf flf = (st,gr,rs,el) : expLevels' (tail odf) (drop os flf)
+expLevelsBestGRCorrelation' :: [FitData] -> [FitData] -> [(Double,Double,Double,Double)]
+expLevelsBestGRCorrelation' _ [] = []
+expLevelsBestGRCorrelation' [] _ = []
+expLevelsBestGRCorrelation' odf flf = (st,gr,rs,el) : expLevelsBestGRCorrelation' (tail odf) (drop os flf)
     where
         st = fdStart . head $ odf
         gr = fdAlpha . head $ odf

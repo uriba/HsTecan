@@ -49,8 +49,8 @@ displayLoop ed wd h = do
     let od_betas = normVals . map (\(x,y) -> (x,fdBeta y)) $ od_fits
     let mc_alphas = normVals . map (\(x,y) -> (x,fdAlpha y)) $ mc_fits
     let mc_betas = normVals . map (\(x,y) -> (x,fdBeta y)) $ mc_fits
-    let yf_exp = normVals $ expLevelsF od_pts yf_pts
-    let mc_exp = normVals $ expLevelsF od_pts mc_pts
+    let yf_exp = normVals $ expLevelsBestGRCorrelation od_pts yf_pts
+    let mc_exp = normVals $ expLevelsBestGRCorrelation od_pts mc_pts
     withPlotHandle h $ do
         withTitle $ setText . wellStr $ w
         setPlots 2 2

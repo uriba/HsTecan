@@ -1,8 +1,10 @@
 module RoboLib (
     Well (..),
     ColonyId (..),
+    colonyId,
     wellFromInts,
     Measurement (..),
+    createExpData,
     mesData,
     timedMesData,
     mesToOdData,
@@ -13,9 +15,7 @@ module RoboLib (
     PlotLinesData,
     TimedPlotLinesData,
     PlotGridData,
-    loadExpData,
     ExpData,
-    createExpData,
     ExpId,
     MType,
     expLevel',
@@ -30,21 +30,15 @@ module RoboLib (
     normalizePlate
     )
 where
-import Text.ParserCombinators.Parsec
-import Data.CSV
-import Data.Either (rights)
 import Data.Function (on)
 import Data.List
-import Data.Map ((!), Map(..))
+import Data.Map ((!), Map(..), fromList)
 import Data.Maybe
-import Math.Statistics (mean)
-import Data.DateTime (fromSeconds, toSqlString, DateTime, toSeconds)
+import Data.DateTime (DateTime, toSeconds)
 import RoboAlg
-import qualified Data.Vector.Unboxed as DVU
+import RoboUtils
 import qualified Statistics.KernelDensity as KD
-import qualified Char as C
 import qualified Data.Map as M
-import qualified Data.Vector as V
 
 -- Some types to make life easier...
 type Label = String
@@ -62,16 +56,16 @@ colonyId (Measurement { mExpDesc = ed, mPlate = mp, mWell = mw }) = ColonyId { c
 wildTypeId = "WT" -- label of colonies that have wt bacteria (for auto-fluorescence cancellation)
 mediaId = "BLANK"  -- label of colonies that have no bacteria (for background cancellation)
 
-type ExpData = M.Map Label (M.Map ColonyId [Measurement]) -- experiment data is mapped like this.
+type ExpData = Map Label (Map ColonyId [Measurement]) -- experiment data is mapped like this.
 
-type ExpLevelData = M.Map Label (M.Map ColonyId [(MType,[Double])]) -- expression levels for each colony and measurement type.
+type ExpLevelData = Map Label (Map ColonyId [(MType,[Double])]) -- expression levels for each colony and measurement type.
 
-type PlotLinesData = M.Map Label (M.Map ColonyId [Double]) -- for each label - a list of colonies, for each colony - a line.
-type TimedPlotLinesData = M.Map Label (M.Map ColonyId [(Double, DateTime)]) -- for each label - a list of colonies, for each colony - a line.
-type PlotGridData = M.Map Label (M.Map ColonyId (Double,Double)) -- for each label - a list of colonies, for each colony - a line.
+type PlotLinesData = Map Label (Map ColonyId [Double]) -- for each label - a list of colonies, for each colony - a line.
+type TimedPlotLinesData = Map Label (Map ColonyId [(Double, DateTime)]) -- for each label - a list of colonies, for each colony - a line.
+type PlotGridData = Map Label (Map ColonyId (Double,Double)) -- for each label - a list of colonies, for each colony - a line.
 
 -- utils for outputting plot data to files
-linesData :: (String,M.Map ColonyId [Double]) -> [[String]]
+linesData :: (String,Map ColonyId [Double]) -> [[String]]
 linesData (label,lines) = map (lineData label) . M.toList $ lines
 
 lineData :: String -> (ColonyId,[Double]) -> [String]
@@ -86,7 +80,7 @@ lineData label (cid,points) = [
 plotLinesDataToStrings :: PlotLinesData -> [[String]]
 plotLinesDataToStrings = concatMap linesData . M.toList
 
-pointsData :: (String,M.Map ColonyId (Double,Double)) -> [[String]]
+pointsData :: (String,Map ColonyId (Double,Double)) -> [[String]]
 pointsData (label,points) = map (pointData label) . M.toList $ points
 
 pointData :: String -> (ColonyId,(Double,Double)) -> [String]
@@ -145,38 +139,16 @@ normalizePlate ed
 changePlate :: Int -> Measurement -> Measurement
 changePlate np ms = ms {mPlate = np}
 
-wellFromInts :: Int -> Int -> Well
-wellFromInts r c = Well { wRow = ['a'..'h'] !! r, wColumn = c + 1 }
-
-maxMes = 70000
-
-readExpLine :: [String] -> Measurement
-readExpLine m = Measurement { 
-		    mExpDesc = m !! 0,
-		    mPlate = read $ m !! 1,
-		    mType = m !! 2,
-		    mTime = fromSeconds . read $ m !! 3,
-		    mWell = (wellFromInts `on` read) (m !! 4) (m !! 5),
-		    mLabel = m !! 6,
-		    mVal = if m !! 7 == "nan" then maxMes else read (m !! 7)
-		}
-
--- assume CSV format of each row is:
--- expId, plate, measurement_type, timestamp, column, row, label, value
-loadExpData :: FilePath -> IO ExpData
-loadExpData filename = do
-    file_data' <- parseFromFile csvFile filename
-    let file_data = head . rights . return $ file_data'
-    let ms = map readExpLine $ file_data
-    return . createExpData $ ms
-
 createExpData :: [Measurement] -> ExpData
-createExpData ms = M.fromList [ (label, m_for_label label) | label <- labels ms]
+createExpData ms = fromList [ (label, m_for_label label) | label <- labels ms]
     where
 	labels = nub . map mLabel
 	colonies l = nub . map colonyId . filterBy mLabel l
 	m_for_colony cid = filterBy colonyId cid ms
-	m_for_label l = M.fromList [ (colony_id, m_for_colony colony_id) | colony_id <- colonies l ms ]
+	m_for_label l = fromList [ (colony_id, m_for_colony colony_id) | colony_id <- colonies l ms ]
+
+wellFromInts :: Int -> Int -> Well
+wellFromInts r c = Well { wRow = ['a'..'h'] !! r, wColumn = c + 1 }
 
 odLiveThreshold = 0.2
 odThreshold = 0.005
@@ -298,9 +270,6 @@ intensityGridData' ed (xtype,ytype) (fx,fy) = grid_points
         plot_vals = M.map (M.map (map (\(mt,vals) -> (mt, calcexp vals)))) data_sets
         grid_points = M.map (M.map (\x -> (fx . fromJust . lookup xtype $ x,fy . fromJust . lookup ytype $ x))) plot_vals
         calcexp = mean . take 3 . drop 2 . reverse . sort
-
-filterBy :: (Eq b) => (a -> b) -> b -> [a] -> [a]
-filterBy f v = filter ((==) v . f)
 
 filterByWell :: Well -> [Measurement] -> [Measurement]
 filterByWell = filterBy mWell
