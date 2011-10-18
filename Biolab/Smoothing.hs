@@ -7,7 +7,7 @@ import Biolab.Types
 import Data.List (sortBy, tails, partition)
 import Data.Function (on)
 import Data.Maybe (mapMaybe)
-import RoboAlg (mean)
+import RoboUtils (mean)
 import qualified Data.Map as M
 
 windowSize = 5

@@ -1,17 +1,22 @@
-module RoboAlg (mean, linFitWindow, expFitWindow, maxGrowth, doublingTime, expLevelEst, expLevelsN,expLevelsBestGRCorrelation)
+module RoboAlg (
+    linFitWindow,
+    expFitWindow,
+    maxGrowth,
+    doublingTime,
+    expLevelEst,
+    expLevelsN,
+    expLevelsBestGRCorrelation
+)
 where
 import Data.Function (on)
 import Data.List (maximumBy, sortBy, tails, elemIndex)
 import Data.Maybe (catMaybes,fromMaybe,fromJust)
 import Data.Tuple.Utils (fst3,snd3,thd3)
 import Fitting
+import RoboUtils (mean)
 import qualified Data.Vector.Unboxed as U
-import qualified Statistics.Sample as S
 
 type Seconds = Integer
-
-mean :: [Double] -> Double
-mean = S.mean . U.fromList
 
 twoHoursWindow = 2 * 3600 + 60 -- to make sure the window includes the last measurement
 
