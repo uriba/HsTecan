@@ -14,7 +14,8 @@ import Data.DateTime (toSeconds, DateTime)
 import System.FilePath (makeValid, (<.>))
 import Math.Combinatorics.Graph (combinationsOf)
 import RoboDB (ExpDesc(..), PlateDesc(..), WellDesc(..), DbMeasurement (..), readTable, DbReadable(..), dbConnectInfo, SelectCriteria(..), loadExpDataDB)
-import RoboLib (Measurement(..), Well(..), wellFromInts, createExpData, ExpData, timedMesData, expMesTypes, ExpId, MType, mesToOdData, timedMesToOdData, smoothAll, bFiltS, intensityGridData, plotGridDataToStrings, plotLinesDataToStrings, Label, PlotGridData, ColonyId(..), wellStr, TimedPlotLinesData)
+import RoboLib (Measurement(..), Well(..), wellFromInts, createExpData, ExpData, timedMesData, expMesTypes, ExpId, MType, mesToOdData, timedMesToOdData, intensityGridData, plotGridDataToStrings, plotLinesDataToStrings, Label, PlotGridData, ColonyId(..), wellStr, TimedPlotLinesData)
+import Biolab.Smoothing (bFiltS, smoothAll)
 import qualified Data.Text as T
 import qualified Data.Map as M
 import qualified Data.ByteString.Lazy as BS

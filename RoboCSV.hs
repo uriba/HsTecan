@@ -5,7 +5,7 @@ where
 import Text.ParserCombinators.Parsec
 import Data.CSV
 import Data.Either (rights)
-import RoboLib (Measurement(..), ExpData(..), ColonyId, colonyId, wellFromInts, createExpData)
+import RoboLib (Measurement(..), ExpData(..), ColonyId, colonyId, wellFromInts, createExpData, maxMes)
 import Data.DateTime (fromSeconds, toSqlString)
 import Data.List (nub)
 import Data.Function (on)

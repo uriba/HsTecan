@@ -1,11 +1,9 @@
 module RoboUtils ( --rename to RoboCommon
     filterBy,
-    maxMes,
 )
 where
 
-maxMes :: Double
-maxMes = 70000
+import qualified Data.ListLike as LL
 
-filterBy :: (Eq b) => (a -> b) -> b -> [a] -> [a]
-filterBy f v = filter ((==) v . f)
+filterBy :: (Eq b, LL.ListLike full a) => (a -> b) -> b -> full -> full
+filterBy f v = LL.filter ((==) v . f)

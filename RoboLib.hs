@@ -21,12 +21,11 @@ module RoboLib (
     expLevel',
     noTrans,
     expMesTypes,
-    smoothAll,
-    bFiltS,
     has,
     Label,
     wellStr,
     AxesTrans,
+    maxMes,
     normalizePlate
     )
 where
@@ -39,24 +38,10 @@ import RoboAlg
 import RoboUtils
 import qualified Statistics.KernelDensity as KD
 import qualified Data.Map as M
+import Biolab.Constants
+import Biolab.Types
 
 -- Some types to make life easier...
-type Label = String
-type MType = String
-type ExpId = String
-type PlateId = Int
-data Well = Well { wRow :: Char , wColumn :: Int } deriving (Eq, Show, Read, Ord)
-data ColonyId = ColonyId { cExp :: ExpId, cPlate :: Int, cWell :: Well } deriving (Eq, Show, Ord)
-
-data Measurement = Measurement { mExpDesc :: ExpId, mPlate :: PlateId, mTime :: DateTime, mType :: MType, mWell :: Well, mLabel :: Label, mVal :: Double } deriving (Eq, Show)
-
-colonyId :: Measurement -> ColonyId
-colonyId (Measurement { mExpDesc = ed, mPlate = mp, mWell = mw }) = ColonyId { cExp = ed, cPlate = mp, cWell = mw }
-
-wildTypeId = "WT" -- label of colonies that have wt bacteria (for auto-fluorescence cancellation)
-mediaId = "BLANK"  -- label of colonies that have no bacteria (for background cancellation)
-
-type ExpData = Map Label (Map ColonyId [Measurement]) -- experiment data is mapped like this.
 
 type ExpLevelData = Map Label (Map ColonyId [(MType,[Double])]) -- expression levels for each colony and measurement type.
 
@@ -97,12 +82,6 @@ pointData label (cid,(x,y)) = [
 plotGridDataToStrings :: PlotGridData -> [[String]]
 plotGridDataToStrings = concatMap pointsData . M.toList
 	    
-type MesTypeCorrectionVals = Map MType Double
-
--- When subtracting background noise these are the minimal legal values.
-minValMap :: MesTypeCorrectionVals
-minValMap = M.fromList [("OD600",0.005), ("YFP", 20), ("MCHERRY",10),("CFP",10), ("GFP",10)]
-
 constantBackgroundMap :: ExpData -> MesTypeCorrectionVals
 constantBackgroundMap ed = M.fromList [(m, bg m) | m <- mes_types]
     where
@@ -149,10 +128,6 @@ createExpData ms = fromList [ (label, m_for_label label) | label <- labels ms]
 
 wellFromInts :: Int -> Int -> Well
 wellFromInts r c = Well { wRow = ['a'..'h'] !! r, wColumn = c + 1 }
-
-odLiveThreshold = 0.2
-odThreshold = 0.005
-stdMinOd = 0.04
 
 verifySingleColony :: [Measurement] -> [Measurement]
 verifySingleColony ms
@@ -279,76 +254,6 @@ filterByType = filterBy mType
 
 filterByWells :: [Well] -> [Measurement] -> [Measurement]
 filterByWells ws = concat . zipWith filterByWell ws . repeat
-
---------------------------- Histograms
-inRange :: (Num a, Ord a) => (a,a) -> a -> Bool
-inRange (minV,maxV) v = v >= minV && v < maxV
-
--- counts value occurence of dots in bins_num evenly distributed in range.
-histData :: (Double, Double) -> Int -> [Double] -> [(Double,Double)]
-histData (min_val, max_val) bins_num dots = result
-    where
-	bins = map ((+) min_val . (*) bin_width . fromIntegral) [0..bins_num]
-	bin_width = (max_val - min_val) / (fromIntegral bins_num)
-	bin_count x = genericLength . filter (inRange (x,x+bin_width)) $ dots
-	result = [ (x, bin_count x) | x <- bins]
-
--- Use the minimal and maximal values of the data for the range.
-histDataDefRange :: Int -> [Double] -> [(Double,Double)]
-histDataDefRange pn d = histData (minimum d, maximum d) pn d
-
--- Create a default Kernel Density histogram.
--- kdHist :: Int -> [Double] -> [(Double,Double)]
--- kdHist points_num dots = zip points_list values_list
---     where
--- 	(points,values) = KD.gaussianPDF points_num . DVU.fromList $ dots -- default KD
--- 	points_list = DVU.toList . KD.fromPoints $ points
--- 	values_list = DVU.toList values
-
-
------------ smoothing
-windowSize = 5
-
-type SmoothDataset = [Double] -> [Double]
-
-changeVal :: Measurement -> Double -> Measurement
-changeVal m x = m {mVal = x}
-
-smoothMes :: SmoothDataset -> [Measurement] -> [Measurement]
-smoothMes f ms = zipWith ($) (map changeVal ordered_data) . f . map mVal $ ordered_data
-    where
-	ordered_data = sortBy (compare `on` mTime) ms
-
-applySmooth' :: SmoothDataset -> MType -> [Measurement] -> [Measurement]
-applySmooth' f mt ms = not_affected ++ smoothed
-    where
-	(affected,not_affected) = partition ((==) mt . mType) ms
-	smoothed = smoothMes f affected
-
-applySmooth :: SmoothDataset -> MType -> ExpData -> ExpData
-applySmooth f mt = M.map (M.map (applySmooth' f mt))
-
-smoothAll :: SmoothDataset -> ExpData -> ExpData
-smoothAll f ed = foldr (applySmooth f) ed ["OD600","MCHERRY","YFP","CFP"]
-
-bFiltS :: SmoothDataset
-bFiltS ds = mapMaybe (bFilt . take windowSize) . tails $ extended_dataset
-    where
-	extended_dataset = header ++ ds ++ trailer
-	header = replicate buf_size . head $ ds
-	trailer = replicate buf_size . last $ ds
-	buf_size = windowSize `div` 2
-
-bFilt :: [Double] -> Maybe Double
-bFilt xs
-    | length xs < windowSize = Nothing
-    | null relevant_data = val xs
-    | otherwise = val relevant_data
-	where
-	    mx = maximum xs
-	    mn = minimum xs
-	    val = Just . mean 
-	    relevant_data = filter (\x -> x < mx && x > mn) $ xs
 
 wellStr :: Well -> String
 wellStr w = concat ["(", [wRow w],",",show . wColumn $ w,")"]
