@@ -2,6 +2,7 @@
 import Yesod
 import Text.Hamlet
 import Text.Julius
+import Text.Cassius
 import Yesod.Form.Fields (fileAFormReq)
 import Yesod.Form.Jquery
 import Database.HDBC.MySQL
@@ -242,6 +243,7 @@ getHomeR = do
         setTitle "Robosite"
         addHamlet $(hamletFile "RoboSiteMain.hamlet")
         addJulius $(juliusFile "RoboSiteMain.julius")
+        --addCassius $(cassiusFile "RoboSiteMain.cassius")
 
 main = do
     warpDebug 3000 RoboSite
