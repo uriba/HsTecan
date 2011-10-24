@@ -7,7 +7,6 @@ import System.Console.GetOpt
 import Data.Maybe
 import Data.List (intersect)
 import Text.ParserCombinators.Parsec
-import Data.CSV
 
 data Options = Options {
     optOutput :: Maybe FilePath,
@@ -34,7 +33,7 @@ plotMesApp ed mfn t = do
     let	ofn = fmap (\x -> x ++ t ++ ".svg") mfn
     plotData t pd ofn 
     let	dfn = (fromMaybe ("graph") mfn) ++ t ++ "data.csv"
-    let file_data = genCsvFile . plotLinesDataToStrings $ pd
+    let file_data = linesDataToCSV $ pd
     writeFile dfn file_data
 
 plotMesToODApp :: ExpData -> Maybe FilePath -> String -> IO ()
@@ -43,7 +42,7 @@ plotMesToODApp ed mfn t = do
     let	ofn = fmap (\x -> x ++ t ++ "toOD.svg") mfn
     plotData t pd ofn
     let	dfn = (fromMaybe ("graph") mfn) ++ t ++ "toODdata.csv"
-    let file_data = genCsvFile . plotLinesDataToStrings $ pd
+    let file_data = linesDataToCSV $ pd
     writeFile dfn file_data
 
 plotGridApp :: ExpData -> (String,String) -> Maybe FilePath -> IO ()
@@ -52,7 +51,7 @@ plotGridApp ed axes mfn = do
     plotIntensityGrid ed axes (logBase 10, logBase 10) ofn
     let igd = intensityGridData ed axes noTrans
     let	dfn = (fromMaybe ("graph") mfn) ++ "Griddata.csv"
-    let file_data = genCsvFile . plotGridDataToStrings $ igd
+    let file_data = gridDataToCSV $ igd
     writeFile dfn file_data
 
 processOpt :: [String] -> Options

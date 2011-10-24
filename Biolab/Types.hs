@@ -21,9 +21,26 @@ type ExpId = String
 type PlateId = Int
 type MesTypeCorrectionVals = Map MType Double
 
-data Well = Well { wRow :: Char , wColumn :: Int } deriving (Eq, Show, Read, Ord)
-data ColonyId = ColonyId { cExp :: ExpId, cPlate :: Int, cWell :: Well } deriving (Eq, Show, Ord)
-data Measurement = Measurement { mExpDesc :: ExpId, mPlate :: PlateId, mTime :: DateTime, mType :: MType, mWell :: Well, mLabel :: Label, mVal :: Double } deriving (Eq, Show)
+data Well = Well {
+        wRow :: Char,
+        wColumn :: Int
+    } deriving (Eq, Show, Read, Ord)
+
+data ColonyId = ColonyId {
+        cExp :: ExpId,
+        cPlate :: Int,
+        cWell :: Well
+    } deriving (Eq, Show, Ord)
+
+data Measurement = Measurement {
+        mExpDesc :: ExpId,
+        mPlate :: PlateId,
+        mTime :: DateTime,
+        mType :: MType,
+        mWell :: Well,
+        mLabel :: Label,
+        mVal :: Double
+    } deriving (Eq, Show)
 
 colonyId :: Measurement -> ColonyId
 colonyId (Measurement { mExpDesc = ed, mPlate = mp, mWell = mw }) = ColonyId { cExp = ed, cPlate = mp, cWell = mw }

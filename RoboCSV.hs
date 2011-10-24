@@ -1,15 +1,20 @@
 module RoboCSV (
     loadExpData,
+    linesDataToCSV,
+    gridDataToCSV,
 )
 where
 import Text.ParserCombinators.Parsec
 import Data.CSV
 import Data.Either (rights)
-import RoboLib (Measurement(..), ExpData(..), ColonyId, colonyId, wellFromInts, createExpData, maxMes)
+import RoboLib (Measurement(..), ExpData(..), ColonyId, colonyId, wellFromInts, createExpData, maxMes, PlotGridData, PlotLinesData)
 import Data.DateTime (fromSeconds, toSqlString)
 import Data.List (nub)
 import Data.Function (on)
+import Data.Map (Map)
+import qualified Data.Map as M
 import RoboUtils
+import Biolab.Types
 
 -- assume CSV format of each row is:
 -- expId, plate, measurement_type, timestamp, column, row, label, value
@@ -31,3 +36,36 @@ readExpLine m = Measurement {
 		    mVal = if m !! 7 == "nan" then maxMes else read (m !! 7)
 		}
 
+-- utils for outputting plot data to files
+linesData :: (String,Map ColonyId [Double]) -> [[String]]
+linesData (label,lines) = map (lineData label) . M.toList $ lines
+
+lineData :: String -> (ColonyId,[Double]) -> [String]
+lineData label (cid,points) = [
+	label,
+	cExp cid,
+	show . cPlate $ cid,
+	[wRow . cWell $ cid],
+	show . wColumn . cWell $ cid
+    ] ++ map show points
+
+linesDataToCSV :: PlotLinesData -> String
+linesDataToCSV = genCsvFile . concatMap linesData . M.toList
+
+pointsData :: (String,Map ColonyId (Double,Double)) -> [[String]]
+pointsData (label,points) = map (pointData label) . M.toList $ points
+
+pointData :: String -> (ColonyId,(Double,Double)) -> [String]
+pointData label (cid,(x,y)) = [
+	label,
+	cExp cid,
+	show . cPlate $ cid,
+	[wRow . cWell $ cid],
+	show . wColumn . cWell $ cid,
+	show x,
+	show y
+    ]
+
+gridDataToCSV :: PlotGridData -> String
+gridDataToCSV = genCsvFile . concatMap pointsData . M.toList
+	    

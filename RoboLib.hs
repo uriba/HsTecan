@@ -10,8 +10,6 @@ module RoboLib (
     mesToOdData,
     timedMesToOdData,
     intensityGridData,
-    plotGridDataToStrings,
-    plotLinesDataToStrings,
     PlotLinesData,
     TimedPlotLinesData,
     PlotGridData,
@@ -49,39 +47,6 @@ type PlotLinesData = Map Label (Map ColonyId [Double]) -- for each label - a lis
 type TimedPlotLinesData = Map Label (Map ColonyId [(Double, DateTime)]) -- for each label - a list of colonies, for each colony - a line.
 type PlotGridData = Map Label (Map ColonyId (Double,Double)) -- for each label - a list of colonies, for each colony - a line.
 
--- utils for outputting plot data to files
-linesData :: (String,Map ColonyId [Double]) -> [[String]]
-linesData (label,lines) = map (lineData label) . M.toList $ lines
-
-lineData :: String -> (ColonyId,[Double]) -> [String]
-lineData label (cid,points) = [
-	label,
-	cExp cid,
-	show . cPlate $ cid,
-	[wRow . cWell $ cid],
-	show . wColumn . cWell $ cid
-    ] ++ map show points
-
-plotLinesDataToStrings :: PlotLinesData -> [[String]]
-plotLinesDataToStrings = concatMap linesData . M.toList
-
-pointsData :: (String,Map ColonyId (Double,Double)) -> [[String]]
-pointsData (label,points) = map (pointData label) . M.toList $ points
-
-pointData :: String -> (ColonyId,(Double,Double)) -> [String]
-pointData label (cid,(x,y)) = [
-	label,
-	cExp cid,
-	show . cPlate $ cid,
-	[wRow . cWell $ cid],
-	show . wColumn . cWell $ cid,
-	show x,
-	show y
-    ]
-
-plotGridDataToStrings :: PlotGridData -> [[String]]
-plotGridDataToStrings = concatMap pointsData . M.toList
-	    
 constantBackgroundMap :: ExpData -> MesTypeCorrectionVals
 constantBackgroundMap ed = M.fromList [(m, bg m) | m <- mes_types]
     where

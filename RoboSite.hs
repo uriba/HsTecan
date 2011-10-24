@@ -15,7 +15,8 @@ import Data.DateTime (toSeconds, DateTime)
 import System.FilePath (makeValid, (<.>))
 import Math.Combinatorics.Graph (combinationsOf)
 import RoboDB (ExpDesc(..), PlateDesc(..), WellDesc(..), DbMeasurement (..), readTable, DbReadable(..), dbConnectInfo, SelectCriteria(..), loadExpDataDB)
-import RoboLib (Measurement(..), Well(..), wellFromInts, createExpData, ExpData, timedMesData, expMesTypes, ExpId, MType, mesToOdData, timedMesToOdData, intensityGridData, plotGridDataToStrings, plotLinesDataToStrings, Label, PlotGridData, ColonyId(..), wellStr, TimedPlotLinesData)
+import RoboLib (Measurement(..), Well(..), wellFromInts, createExpData, ExpData, timedMesData, expMesTypes, ExpId, MType, mesToOdData, timedMesToOdData, intensityGridData, Label, PlotGridData, ColonyId(..), wellStr, TimedPlotLinesData)
+import RoboCSV (linesDataToCSV, gridDataToCSV)
 import Biolab.Smoothing (bFiltS, smoothAll)
 import qualified Data.Text as T
 import qualified Data.Map as M
@@ -23,10 +24,9 @@ import qualified Data.ByteString.Lazy as BS
 import qualified Data.ByteString.UTF8 as U
 import qualified Text.JSON as J
 import Control.Applicative ((<$>), pure, (<*>))
-import Data.CSV (genCsvFile)
 import HighChartsJson
-import Text.ParserCombinators.Parsec
-import Data.CSV
+import Text.ParserCombinators.Parsec (parse)
+import Data.CSV (csvFile)
 import Data.Either.Utils
 import RoboAlg
 
@@ -104,7 +104,7 @@ getGridGraphData exp plate x y = do
 getGridGraphCSV :: ExpId -> Plate -> MType -> MType -> Handler RepHtml
 getGridGraphCSV exp plate x y = do
     igd <- liftIO $ getGridGraphData exp plate x y
-    let bytes = genCsvFile . plotGridDataToStrings $ igd
+    let bytes = gridDataToCSV $ igd
     sendResponse (typePlain, toContent bytes)
 
 getGridGraph :: ExpId -> Plate -> MType -> MType -> Handler RepHtml
@@ -125,7 +125,7 @@ getExpLevelData exp plate t = do
 getExpLevelCSV :: ExpId -> Plate -> MType -> Handler RepHtml
 getExpLevelCSV exp plate t = do
     pd <- liftIO $ getExpLevelData exp plate t
-    let bytes = genCsvFile . plotLinesDataToStrings . M.map (M.map (map fst)) $ pd
+    let bytes = linesDataToCSV . M.map (M.map (map fst)) $ pd
     sendResponse (typePlain, toContent bytes)
 
 getExpLevelGraph :: ExpId -> Plate -> MType -> Handler RepHtml
@@ -146,7 +146,7 @@ getReadGraphData exp plate t = do
 getReadGraphCSV :: ExpId -> Plate -> MType -> Handler RepHtml
 getReadGraphCSV exp plate t = do
     pd <- liftIO $ getReadGraphData exp plate t
-    let bytes = genCsvFile . plotLinesDataToStrings . M.map (M.map (map fst)) $ pd
+    let bytes = linesDataToCSV . M.map (M.map (map fst)) $ pd
     sendResponse (typePlain, toContent bytes)
 
 getLogReadGraph :: ExpId -> Plate -> MType -> Handler RepHtml
