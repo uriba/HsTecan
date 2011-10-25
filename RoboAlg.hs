@@ -13,7 +13,7 @@ import Data.List (maximumBy, sortBy, tails, elemIndex)
 import Data.Maybe (catMaybes,fromMaybe,fromJust)
 import Data.Tuple.Utils (fst3,snd3,thd3)
 import Fitting
-import RoboUtils (mean)
+import Biolab.Patches (mean)
 import qualified Data.Vector.Unboxed as U
 
 type Seconds = Integer

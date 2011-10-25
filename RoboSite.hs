@@ -8,14 +8,11 @@ import Yesod.Form.Jquery
 import Database.HDBC.MySQL
 import Database.HDBC
 import Data.ByteString.UTF8 (toString)
-import Data.Function (on)
 import Data.List (nub, find, sort)
 import Data.Maybe (isJust, fromJust, fromMaybe)
-import Data.DateTime (toSeconds, DateTime)
-import System.FilePath (makeValid, (<.>))
 import Math.Combinatorics.Graph (combinationsOf)
-import RoboDB (ExpDesc(..), PlateDesc(..), WellDesc(..), DbMeasurement (..), readTable, DbReadable(..), dbConnectInfo, SelectCriteria(..), loadExpDataDB)
-import RoboLib (Measurement(..), Well(..), wellFromInts, createExpData, ExpData, timedMesData, expMesTypes, ExpId, MType, mesToOdData, timedMesToOdData, intensityGridData, Label, PlotGridData, ColonyId(..), wellStr, TimedPlotLinesData)
+import RoboDB (ExpDesc(..), PlateDesc(..), readTable, dbConnectInfo, loadExpDataDB)
+import RoboLib (Measurement(..), timedMesData, ExpId, MType, timedMesToOdData, intensityGridData, PlotGridData, TimedPlotLinesData)
 import RoboCSV (linesDataToCSV, gridDataToCSV)
 import Biolab.Smoothing (bFiltS, smoothAll)
 import qualified Data.Text as T
@@ -28,7 +25,6 @@ import HighChartsJson
 import Text.ParserCombinators.Parsec (parse)
 import Data.CSV (csvFile)
 import Data.Either.Utils
-import RoboAlg
 
 data GraphDesc = GraphDesc {gdExp :: ExpId, gdPlate :: Plate, gdMesType :: MType, gdExpDesc :: Maybe String, gdPlateDesc :: Maybe String} deriving (Show)
 

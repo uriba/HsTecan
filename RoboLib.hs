@@ -18,7 +18,6 @@ module RoboLib (
     MType,
     expLevel',
     noTrans,
-    expMesTypes,
     has,
     Label,
     wellStr,
@@ -33,52 +32,27 @@ import Data.Map ((!), Map(..), fromList)
 import Data.Maybe
 import Data.DateTime (DateTime, toSeconds)
 import RoboAlg
-import RoboUtils
 import qualified Statistics.KernelDensity as KD
 import qualified Data.Map as M
 import Biolab.Constants
 import Biolab.Types
+import Biolab.Measurement (mesByTime, valByTime, filterBy)
+import Biolab.ExpData
+import Biolab.Patches (mean)
 
 -- Some types to make life easier...
 
 type ExpLevelData = Map Label (Map ColonyId [(MType,[Double])]) -- expression levels for each colony and measurement type.
-
 type PlotLinesData = Map Label (Map ColonyId [Double]) -- for each label - a list of colonies, for each colony - a line.
 type TimedPlotLinesData = Map Label (Map ColonyId [(Double, DateTime)]) -- for each label - a list of colonies, for each colony - a line.
 type PlotGridData = Map Label (Map ColonyId (Double,Double)) -- for each label - a list of colonies, for each colony - a line.
-
-constantBackgroundMap :: ExpData -> MesTypeCorrectionVals
-constantBackgroundMap ed = M.fromList [(m, bg m) | m <- mes_types]
-    where
-	bg m = mean . map mVal . filterByType m $ bg_mes 
-	mes_types = mesTypes bg_mes
-	bg_mes = concat . filter (not . liveWell) . M.elems $ (ed ! mediaId)
-
-subtractConstantBackground :: ExpData -> ExpData
-subtractConstantBackground ed = M.map (M.map (map (\x -> x {mVal = corrected_mval x}))) ed
-    where
-	background_map = constantBackgroundMap ed
-	corrected_mval m =
-	    let mt = mType m in max (minValMap ! mt) (mVal m - (background_map ! mt))
-
-mesTypes :: [Measurement] -> [String]
-mesTypes = nub . map mType
-
-expMesTypes :: ExpData -> [String]
-expMesTypes = nub . map mType . concat . concatMap M.elems . M.elems
 
 autoFluorescenceMap :: ExpData -> Maybe MesTypeCorrectionVals
 autoFluorescenceMap ed = do
     af_colonies <- M.lookup wildTypeId ed
     let af_mes = M.elems af_colonies
-    let mes_types = mesTypes . concat $ af_mes
     let af m = mean . map (expLevel' m) $ af_mes
-    return . M.fromList $ [(m, af m) | m <- mes_types]
-
-normalizePlate :: ExpData -> ExpData
-normalizePlate ed
-    | Nothing == M.lookup mediaId ed = M.map (M.map (map (\x -> if mType x == "OD600" then x {mVal = max (minValMap ! "OD600") (mVal x - stdMinOd)} else x))) $ ed
-    | otherwise = subtractConstantBackground ed
+    return . M.fromList $ [(m, af m) | m <- expMesTypes ed]
 
 changePlate :: Int -> Measurement -> Measurement
 changePlate np ms = ms {mPlate = np}
@@ -93,21 +67,6 @@ createExpData ms = fromList [ (label, m_for_label label) | label <- labels ms]
 
 wellFromInts :: Int -> Int -> Well
 wellFromInts r c = Well { wRow = ['a'..'h'] !! r, wColumn = c + 1 }
-
-verifySingleColony :: [Measurement] -> [Measurement]
-verifySingleColony ms
-    | null ms = error "empty list of measurements given"
-    | 1 < (length . nub . map colonyId $ ms) = error $ "measurements for more than one colony given" ++ show ms
-    | otherwise = ms
-
-liveWell :: [Measurement] -> Bool -- returns whether measurements taken from a given well indicate that it grew.
-liveWell ms = (last . valByTime "OD600" $ ms) > odLiveThreshold
-
-mesByTime :: MType -> [Measurement] -> [Measurement]
-mesByTime mt = sortBy (compare `on` mTime) . filterByType mt . verifySingleColony
-
-valByTime :: MType -> [Measurement] -> [Double]
-valByTime mt = map mVal . mesByTime mt
 
 has :: (Eq a) => [a] -> a -> Bool
 has = flip elem
@@ -170,7 +129,7 @@ expLevel' :: MType -> [Measurement] -> Double
 expLevel' mt = mean . mesToOd mt Nothing
 
 expLevels :: ExpData -> ExpLevelData
-expLevels ed = M.map (M.map (\x -> [(m,if m == "OD600" then repeat . maxGrowth . od_mes $ x else mesToOd m Nothing x) | m <- mesTypes x])) ed
+expLevels ed = M.map (M.map (\x -> [(m,if m == "OD600" then repeat . maxGrowth . od_mes $ x else mesToOd m Nothing x) | m <- expMesTypes ed])) ed
     where
         od_mes = sortBy (compare `on` snd) . map (\x -> (mVal x,toSeconds . mTime $ x)) . filter (\x -> mType x == "OD600")
 
@@ -210,15 +169,6 @@ intensityGridData' ed (xtype,ytype) (fx,fy) = grid_points
         plot_vals = M.map (M.map (map (\(mt,vals) -> (mt, calcexp vals)))) data_sets
         grid_points = M.map (M.map (\x -> (fx . fromJust . lookup xtype $ x,fy . fromJust . lookup ytype $ x))) plot_vals
         calcexp = mean . take 3 . drop 2 . reverse . sort
-
-filterByWell :: Well -> [Measurement] -> [Measurement]
-filterByWell = filterBy mWell
-
-filterByType :: String -> [Measurement] -> [Measurement]
-filterByType = filterBy mType
-
-filterByWells :: [Well] -> [Measurement] -> [Measurement]
-filterByWells ws = concat . zipWith filterByWell ws . repeat
 
 wellStr :: Well -> String
 wellStr w = concat ["(", [wRow w],",",show . wColumn $ w,")"]

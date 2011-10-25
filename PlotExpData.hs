@@ -1,6 +1,7 @@
 import RoboLib
 import RoboCSV
 import Biolab.Smoothing
+import Biolab.ExpData (expMesTypes)
 import GnuPlotUtils
 import System (getArgs)
 import System.Console.GetOpt

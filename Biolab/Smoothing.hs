@@ -8,7 +8,7 @@ import Biolab.Types
 import Data.List (sortBy, tails, partition)
 import Data.Function (on)
 import Data.Maybe (mapMaybe)
-import RoboUtils (mean)
+import Biolab.Patches (mean)
 import qualified Data.Map as M
 import qualified Data.ListLike as LL
 import Data.ListLike.Vector.Unboxed
