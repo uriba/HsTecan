@@ -5,6 +5,7 @@ module GnuPlotUtils (
 where
 
 import Graphics.Gnuplot.Simple
+import Biolab.Types (ExpData(..), MType)
 import RoboLib
 import qualified Data.Map as M
 import Data.Maybe (fromMaybe)

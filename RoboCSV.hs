@@ -7,13 +7,16 @@ where
 import Text.ParserCombinators.Parsec
 import Data.CSV
 import Data.Either (rights)
-import RoboLib (Measurement(..), ExpData(..), ColonyId, colonyId, wellFromInts, createExpData, maxMes, PlotGridData, PlotLinesData)
+import RoboLib (PlotGridData, PlotLinesData)
 import Data.DateTime (fromSeconds, toSqlString)
 import Data.List (nub)
 import Data.Function (on)
 import Data.Map (Map)
 import qualified Data.Map as M
+import Biolab.Constants (maxMes)
 import Biolab.Types
+import Biolab.Measurement (wellFromInts)
+import Biolab.ExpData (createExpData)
 
 -- assume CSV format of each row is:
 -- expId, plate, measurement_type, timestamp, column, row, label, value

@@ -2,6 +2,7 @@ module Biolab.ExpData (
     normalizePlate,
     liveWell,
     expMesTypes,
+    createExpData,
 )
 where
 
@@ -37,4 +38,12 @@ normalizePlate ed
 
 liveWell :: [Measurement] -> Bool -- returns whether measurements taken from a given well indicate that it grew.
 liveWell ms = (last . valByTime "OD600" $ ms) > odLiveThreshold
+
+createExpData :: [Measurement] -> ExpData
+createExpData ms = fromList [ (label, m_for_label label) | label <- labels ms]
+    where
+	labels = nub . map mLabel
+	colonies l = nub . map colonyId . filterBy mLabel l
+	m_for_colony cid = filterBy colonyId cid ms
+	m_for_label l = fromList [ (colony_id, m_for_colony colony_id) | colony_id <- colonies l ms ]
 

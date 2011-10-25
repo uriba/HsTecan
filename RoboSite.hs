@@ -12,9 +12,10 @@ import Data.List (nub, find, sort)
 import Data.Maybe (isJust, fromJust, fromMaybe)
 import Math.Combinatorics.Graph (combinationsOf)
 import RoboDB (ExpDesc(..), PlateDesc(..), readTable, dbConnectInfo, loadExpDataDB)
-import RoboLib (Measurement(..), timedMesData, ExpId, MType, timedMesToOdData, intensityGridData, PlotGridData, TimedPlotLinesData)
+import RoboLib (timedMesData, timedMesToOdData, intensityGridData, PlotGridData, TimedPlotLinesData)
 import RoboCSV (linesDataToCSV, gridDataToCSV)
 import Biolab.Smoothing (bFiltS, smoothAll)
+import Biolab.Types (Measurement(..), ExpId, MType)
 import qualified Data.Text as T
 import qualified Data.Map as M
 import qualified Data.ByteString.Lazy as BS

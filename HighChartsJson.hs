@@ -14,7 +14,8 @@ where
 import qualified Text.JSON as J
 import qualified Data.Map as M
 import Text.Printf (printf)
-import RoboLib (Well(..), Label, PlotGridData, ColonyId(..), wellStr)
+import RoboLib (PlotGridData, wellStr)
+import Biolab.Types (Well(..), Label, ColonyId(..))
 import Data.Maybe (fromMaybe, fromJust)
 import Data.DateTime (toSeconds, DateTime)
 

@@ -17,7 +17,10 @@ import Data.ByteString.UTF8 (toString)
 import Data.Function (on)
 import Data.Maybe (fromMaybe)
 import Data.DateTime (fromSeconds, DateTime)
-import RoboLib (ExpId, Well(..), wellFromInts, Measurement(..), MType,createExpData, ExpData (..),wellStr)
+import RoboLib (wellStr)
+import Biolab.Types (Well(..), Measurement(..), ExpData(..), MType, ExpId)
+import Biolab.Measurement (wellFromInts)
+import Biolab.ExpData (createExpData)
 import Data.List (find)
 
 dbConnectInfo = MySQLConnectInfo {

@@ -7,12 +7,15 @@ module Biolab.Types (
     Well(..),
     ColonyId(..),
     Measurement(..),
+    LabeledData(..),
+    ldMap,
     ExpData,
     colonyId,
 )
 where
 
-import Data.Map
+import Data.Map (Map)
+import qualified Data.Map as M
 import Data.DateTime (DateTime)
 
 type MType = String
@@ -43,6 +46,15 @@ data Measurement = Measurement {
     } deriving (Eq, Show)
 
 colonyId :: Measurement -> ColonyId
-colonyId (Measurement { mExpDesc = ed, mPlate = mp, mWell = mw }) = ColonyId { cExp = ed, cPlate = mp, cWell = mw }
+colonyId m = ColonyId {
+        cExp = mExpDesc m,
+        cPlate = mPlate m,
+        cWell = mWell m
+    }
 
-type ExpData = Map Label (Map ColonyId [Measurement]) -- experiment data is mapped like this.
+type LabeledData a = Map Label (Map ColonyId a)
+    
+ldMap :: (a -> b) -> LabeledData a -> LabeledData b
+ldMap f = M.map (M.map f)
+
+type ExpData = LabeledData [Measurement] -- experiment data is mapped like this.

@@ -2,6 +2,8 @@ import RoboAlg
 import RoboDB
 import Fitting
 import RoboLib
+import Biolab.Types (Measurement (..), ExpData, Well(..), ColonyId(..))
+import Biolab.ExpData (normalizePlate)
 import qualified Data.List as L
 import qualified Data.Map as M
 import qualified Data.Packed.Vector as V
@@ -12,8 +14,8 @@ import Data.Maybe
 import System (getArgs)
 import Graphics.Rendering.Plot
 import Graphics.Rendering.Plot.Gtk
-import Graphics.Rendering.Plot.Figure
-import Graphics.Rendering.Plot.Figure.Simple
+-- import Graphics.Rendering.Plot.Figure
+-- import Graphics.Rendering.Plot.Figure.Simple
 
 toPts :: String -> [Measurement] -> [(Double,Double)]
 toPts mt = L.sortBy (compare `on` fst) . map (\m -> (fromIntegral . toSeconds . mTime $ m,mVal m)) . filter (\m -> mType m == mt)

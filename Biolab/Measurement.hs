@@ -5,6 +5,7 @@ module Biolab.Measurement (
     filterByType,
     valByTime,
     mesByTime,
+    wellFromInts,
 )
 where
 
@@ -38,3 +39,5 @@ verifySingleColony ms
     | 1 < (length . nub . map colonyId $ ms) = error $ "measurements for more than one colony given" ++ show ms
     | otherwise = ms
 
+wellFromInts :: Int -> Int -> Well
+wellFromInts r c = Well { wRow = ['a'..'h'] !! r, wColumn = c + 1 }
