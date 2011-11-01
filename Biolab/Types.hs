@@ -11,6 +11,7 @@ module Biolab.Types (
     ldMap,
     ExpData,
     colonyId,
+    Seconds,
 )
 where
 
@@ -18,6 +19,7 @@ import Data.Map (Map)
 import qualified Data.Map as M
 import Data.DateTime (DateTime)
 
+type Seconds = Integer
 type MType = String
 type Label = String
 type ExpId = String

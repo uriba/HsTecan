@@ -224,7 +224,7 @@ readings :: ExpId -> Plate -> [GraphDesc] -> [MType]
 readings eid p = nub . map gdMesType . filter (\x -> gdExp x == eid && gdPlate x == p)
 
 expLevels :: ExpId -> Plate -> [GraphDesc] -> [MType]
-expLevels e p = filter (/= "OD600") . readings e p
+expLevels e p = readings e p
 
 grids :: ExpId -> Plate -> [GraphDesc] -> [(MType,MType)]
 grids e p gd = zip (map head all_pairs) (map last all_pairs)

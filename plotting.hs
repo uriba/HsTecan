@@ -1,9 +1,11 @@
-import RoboAlg
-import RoboDB
-import Fitting
 import RoboLib
+import RoboDB
 import Biolab.Types (Measurement (..), ExpData, Well(..), ColonyId(..))
 import Biolab.ExpData (normalizePlate)
+import Biolab.Patches (mapSnd)
+import Biolab.Constants (maturationTime)
+import Biolab.Processing (expressionLevels)
+import Biolab.Utils.Vector (expFitWindow, FitData(..))
 import qualified Data.List as L
 import qualified Data.Map as M
 import qualified Data.Packed.Vector as V
@@ -23,8 +25,11 @@ toPts mt = L.sortBy (compare `on` fst) . map (\m -> (fromIntegral . toSeconds . 
 normalizeTime :: (Fractional a) => [(a,b)] -> [(a,b)]
 normalizeTime ((x1,y1):xys) = map (\(x,y) -> ((x-x1)/3600,y)) ((x1,y1):xys)
 
+toLog :: (Floating a) => [(b,a)] -> [(b,a)]
+toLog = map (mapSnd (logBase 2)) 
+
 normVals :: (RealFloat a) => [(b,a)] -> [(b,a)]
-normVals = filter (not . isNaN . snd)
+normVals = map (\(x,y) -> if isNaN y then (x,0) else (x,y))
 
 xs = V.fromList . map fst
 ys = V.fromList . map snd
@@ -42,21 +47,21 @@ displayLoop ed wd h = do
     let log_ods = toLog od_pts
     let log_yfp = toLog yf_pts
     let log_mch = toLog mc_pts
-    let od_fits = zip (map fst od_pts) . expFitWindow 2.01 . U.fromList $ od_pts
-    let yf_fits = zip (map fst yf_pts) . expFitWindow 2.01 . U.fromList $ yf_pts
-    let mc_fits = zip (map fst mc_pts) . expFitWindow 2.01 . U.fromList $ mc_pts
+    let od_fits = expFitWindow 2.01 . U.fromList $ od_pts
+    let yf_fits = expFitWindow 2.01 . U.fromList $ yf_pts
+    let mc_fits = expFitWindow 2.01 . U.fromList $ mc_pts
     let yf_alphas = normVals . map (\(x,y) -> (x,fdAlpha y)) $ yf_fits
     let yf_betas = normVals . map (\(x,y) -> (x,fdBeta y)) $ yf_fits
     let od_alphas = normVals . map (\(x,y) -> (x,fdAlpha y)) $ od_fits
     let od_betas = normVals . map (\(x,y) -> (x,fdBeta y)) $ od_fits
     let mc_alphas = normVals . map (\(x,y) -> (x,fdAlpha y)) $ mc_fits
     let mc_betas = normVals . map (\(x,y) -> (x,fdBeta y)) $ mc_fits
-    let yf_exp = normVals $ (expLevelsBestGRCorrelation `on` U.fromList) od_pts yf_pts
-    let mc_exp = normVals $ (expLevelsBestGRCorrelation `on` U.fromList) od_pts mc_pts
+    let yf_exp = normVals . U.toList $ ((expressionLevels maturationTime) `on` U.fromList) od_pts yf_pts
+    let mc_exp = normVals . U.toList $ ((expressionLevels maturationTime) `on` U.fromList) od_pts mc_pts
     withPlotHandle h $ do
         withTitle $ setText . wellStr $ w
-        setPlots 2 2
-        withPlot (1,1) $ do
+        setPlots 1 1
+{-        withPlot (1,1) $ do
             setDataset [
                 (LinePoint, xs od_alphas, (ys od_alphas,Lower)),
                 (LinePoint, xs yf_alphas,(ys yf_alphas,Lower)),
@@ -67,7 +72,7 @@ displayLoop ed wd h = do
                 ]
             addAxis XAxis (Side Lower) $ do
                 withAxisLabel . setText $ "time [hours]"
-                setTicks Minor (Left 48)
+                setTicks Minor (Left $ length log_ods)
                 setGridlines Minor True
             addAxis YAxis (Side Lower) $ do
                 withAxisLabel . setText $ "Growth rate"
@@ -86,14 +91,14 @@ displayLoop ed wd h = do
                 ]
             addAxis XAxis (Side Lower) $ do
                 withAxisLabel . setText $ "time [hours]"
-                setTicks Minor (Left $ 47)
+                setTicks Minor (Left $ length od_betas)
                 setGridlines Minor True
             addAxis YAxis (Side Lower) $ do
                 withAxisLabel . setText $ "Log measurement"
             setRangeFromData XAxis Lower Linear
             setRangeFromData YAxis Lower Linear
-            withHeading . setText $ "Beta OD, YFP, mCherry"
-        withPlot (2,1) $ do
+            withHeading . setText $ "Beta OD, YFP, mCherry"-}
+        withPlot (1,1) $ do
             setDataset [
                 (LinePoint, xs od_alphas, ys od_alphas),
                 (LinePoint, xs yf_alphas, ys yf_alphas),
@@ -101,27 +106,27 @@ displayLoop ed wd h = do
                 ]
             addAxis XAxis (Side Lower) $ do
                 withAxisLabel . setText $ "time [hours]"
-                setTicks Minor (Left $ 47)
+                setTicks Minor (Left $ length od_alphas)
                 setGridlines Minor True
             addAxis YAxis (Side Lower) $ do
                 withAxisLabel . setText $ "Growth rate"
             setRangeFromData XAxis Lower Linear
             setRangeFromData YAxis Lower Linear
             withHeading . setText $ "Growth rate and Fluorescense rate"
-        withPlot (2,2) $ do
+        {-withPlot (2,2) $ do
             setDataset [
                 (LinePoint , xs yf_exp,ys yf_exp),
                 (LinePoint , xs mc_exp,ys mc_exp)
                 ]
             addAxis XAxis (Side Lower) $ do
                 withAxisLabel . setText $ "time [hours]"
-                setTicks Minor (Left $ 47)
+                setTicks Minor (Left $ length yf_exp)
                 setGridlines Minor True
             addAxis YAxis (Side Lower) $ do
                 withAxisLabel . setText $ "Expression level"
             setRangeFromData XAxis Lower Linear
             setRangeFromData YAxis Lower Linear
-            withHeading . setText $ "exp level"
+            withHeading . setText $ "exp level"-}
     next <- getLine
     if next == "q"
         then return ()
@@ -131,14 +136,18 @@ main = do
     [exp_id_p, pl] <- getArgs
     exp_descs <- readTable "tecan_experiments" $ Nothing
     let exp_ids = map edExp exp_descs
+    putStrLn $ "searching for: " ++ exp_id_p
     let exp_id = fromJust . L.find (L.isPrefixOf exp_id_p) $ exp_ids
+    putStrLn $ "found: " ++ exp_id
     --ed <- loadExpDataDB "2011-09-27 17:07:57" 0
     --ed <- loadExpDataDB "2011-10-05 17:55:38" 2
     --ed <- loadExpDataDB "2011-09-08 17:37:00" 6
     ed <- loadExpDataDB exp_id . read $ pl
     let edn = normalizePlate ed
     if (length . M.elems $ edn) == 0
-        then return ()
+        then do
+            putStrLn $ "empty list"
+            return ()
         else do
             h <- display $ withTitle $ setText (exp_id ++ ", Plate: " ++ pl)
             displayLoop edn "a1" h

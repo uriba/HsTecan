@@ -18,13 +18,14 @@ import Data.List
 import Data.Map ((!), Map(..), fromList)
 import Data.Maybe
 import Data.DateTime (DateTime, toSeconds)
-import RoboAlg
 import qualified Data.Map as M
+import qualified Data.Vector.Generic as G
 import Biolab.Constants
 import Biolab.Types
 import Biolab.Measurement (mesByTime, valByTime, filterBy)
 import Biolab.ExpData
 import Biolab.Patches (mean, isLegal)
+import Biolab.Processing (expressionLevelEstimate, expressionLevels, maxGrowthRate)
 
 -- Some types to make life easier...
 type ExpLevelData = LabeledData [(MType,[Double])] -- expression levels for each colony and measurement type.
@@ -96,9 +97,9 @@ expLevel' :: MType -> [Measurement] -> Double
 expLevel' mt = mean . mesToOd mt Nothing
 
 expLevels :: ExpData -> ExpLevelData
-expLevels ed = ldMap (\x -> [(m,if m == "OD600" then repeat . maxGrowth . od_mes $ x else mesToOd m Nothing x) | m <- expMesTypes ed]) ed
+expLevels ed = ldMap (\x -> [(m,if m == "OD600" then repeat . maxGrowthRate . od_mes $ x else mesToOd m Nothing x) | m <- expMesTypes ed]) ed
     where
-        od_mes = sortBy (compare `on` snd) . map (\x -> (mVal x,toSeconds . mTime $ x)) . filter (\x -> mType x == "OD600")
+        od_mes = G.fromList . sortBy (compare `on` fst) . map (\x -> (fromIntegral . toSeconds . mTime $ x, mVal x)) . filter (\x -> mType x == "OD600")
 
 subtractAutoFluorescence :: ExpData -> ExpLevelData -- need adjustment for df/dt and maximum value selection
 subtractAutoFluorescence ed = ldMap (map (\(mt,vals) -> (mt, map (corrected_el mt) vals))) . expLevels $ ed
@@ -113,12 +114,19 @@ type AxesTrans = ((Double -> Double),(Double -> Double))
 noTrans = (id,id)
 
 intensityGridData :: ExpData -> (String,String) -> AxesTrans -> PlotGridData
+intensityGridData ed (x,"OD600") at = intensityGridData ed ("OD600",x) at
+intensityGridData ed ("OD600",ytype) (fx,fy) = grid_points
+    where
+        ned = removeDeadWells . normalizePlate $ ed
+        m_mes m = G.fromList . sortBy (compare `on` fst) . map (\x -> (fromIntegral . toSeconds . mTime $ x, mVal x)) . filter (\x -> mType x == m)
+        exp_level m ms = expressionLevelEstimate maturationTime (m_mes "OD600" ms) (m_mes m ms)
+        grid_points = ldMap (\x -> (maxGrowthRate . m_mes "OD600" $ x,exp_level ytype $ x)) ned
+
 intensityGridData ed (xtype,ytype) (fx,fy) = grid_points
     where
         ned = removeDeadWells . normalizePlate $ ed
-        m_mes m = sortBy (compare `on` snd) . map (\x -> (mVal x,toSeconds . mTime $ x)) . filter (\x -> mType x == m)
-        exp_c m ms = expLevelEst (m_mes "OD600" ms) (m_mes m ms)
-        exp_level mt ms = exp_c mt ms
+        m_mes m = G.fromList . sortBy (compare `on` fst) . map (\x -> (fromIntegral . toSeconds . mTime $ x, mVal x)) . filter (\x -> mType x == m)
+        exp_level mt ms = expressionLevelEstimate maturationTime (m_mes "OD600" ms) (m_mes mt ms)
         grid_points = ldMap (\x -> (exp_level xtype x,exp_level ytype $ x)) ned
 
 growthGridData :: ExpData -> (String,String) -> AxesTrans -> PlotGridData

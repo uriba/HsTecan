@@ -6,12 +6,15 @@ module Biolab.Constants (
     odLiveThreshold,
     odThreshold,
     stdMinOd,
+    exponentialPhaseGrowthRateWindow,
+    maturationTime,
 )
 
 where
 import Data.Map
 import Biolab.Types
 
+-- plate-reader constants
 maxMes :: Double
 maxMes = 70000
 
@@ -26,3 +29,7 @@ odLiveThreshold = 0.1
 odThreshold = 0.005
 stdMinOd = 0.04
 
+-- biological constants
+exponentialPhaseGrowthRateWindow :: Double
+exponentialPhaseGrowthRateWindow = 2 * 3600 + 60 -- to make sure the window includes the last measurement
+maturationTime = 1800 -- estimated fluorophore maturation time
