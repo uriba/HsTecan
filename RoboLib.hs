@@ -25,7 +25,7 @@ import Biolab.Types
 import Biolab.Measurement (mesByTime, valByTime, filterBy)
 import Biolab.ExpData
 import Biolab.Patches (mean, isLegal)
-import Biolab.Processing (expressionLevelEstimate, expressionLevels, maxGrowthRate)
+import Biolab.Processing (expressionLevelEstimate, expressionLevels, maxGrowthRatePerHour)
 
 -- Some types to make life easier...
 type ExpLevelData = LabeledData [(MType,[Double])] -- expression levels for each colony and measurement type.
@@ -97,7 +97,7 @@ expLevel' :: MType -> [Measurement] -> Double
 expLevel' mt = mean . mesToOd mt Nothing
 
 expLevels :: ExpData -> ExpLevelData
-expLevels ed = ldMap (\x -> [(m,if m == "OD600" then repeat . maxGrowthRate . od_mes $ x else mesToOd m Nothing x) | m <- expMesTypes ed]) ed
+expLevels ed = ldMap (\x -> [(m,if m == "OD600" then repeat . maxGrowthRatePerHour . od_mes $ x else mesToOd m Nothing x) | m <- expMesTypes ed]) ed
     where
         od_mes = G.fromList . sortBy (compare `on` fst) . map (\x -> (fromIntegral . toSeconds . mTime $ x, mVal x)) . filter (\x -> mType x == "OD600")
 
@@ -120,7 +120,7 @@ intensityGridData ed ("OD600",ytype) (fx,fy) = grid_points
         ned = removeDeadWells . normalizePlate $ ed
         m_mes m = G.fromList . sortBy (compare `on` fst) . map (\x -> (fromIntegral . toSeconds . mTime $ x, mVal x)) . filter (\x -> mType x == m)
         exp_level m ms = expressionLevelEstimate maturationTime (m_mes "OD600" ms) (m_mes m ms)
-        grid_points = ldMap (\x -> (maxGrowthRate . m_mes "OD600" $ x,exp_level ytype $ x)) ned
+        grid_points = ldMap (\x -> (maxGrowthRatePerHour . m_mes "OD600" $ x,exp_level ytype $ x)) ned
 
 intensityGridData ed (xtype,ytype) (fx,fy) = grid_points
     where

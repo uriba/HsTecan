@@ -228,7 +228,7 @@ expLevels e p = readings e p
 grids :: ExpId -> Plate -> [GraphDesc] -> [(MType,MType)]
 grids e p gd = zip (map head all_pairs) (map last all_pairs)
     where
-        all_pairs = combinationsOf 2 . expLevels e p $ gd
+        all_pairs = map (\x -> if last x == "OD600" then [last x, head x] else x) . combinationsOf 2 . expLevels e p $ gd
 
 getHomeR :: Handler RepHtml
 getHomeR = do

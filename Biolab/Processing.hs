@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleContexts, FlexibleInstances, UndecidableInstances, MultiParamTypeClasses #-}
 module Biolab.Processing (
     -- Biology related functions:
-    maxGrowthRate,
+    maxGrowthRatePerHour,
     expressionLevelEstimate,
     expressionLevels,
 )
@@ -11,7 +11,7 @@ import Statistics.LinearRegression (linearRegressionRSqr)
 import qualified Data.Vector.Generic as G
 import Biolab.Utils.Vector
 import Biolab.Types
-import Biolab.Patches (mean, isLegal)
+import Biolab.Patches (mean, isLegal, mapFst)
 import Biolab.Constants
 import Data.Maybe (fromJust)
 import Data.List (sort, find, maximumBy, genericDrop)
@@ -21,14 +21,15 @@ import Data.Function (on)
 alphas :: [FitData] -> [Double]
 alphas = map fdAlpha
 
+exponentialPhaseGrowthRateWindowHours = exponentialPhaseGrowthRateWindow / 3600
 -- estimate max growth rate based on steepest slope of linear fit in log space of the OD, running on a predefined length window.
-growthRates :: Series -> [Double]
-growthRates = alphas . filter ((0.95 <) . fdRSqr) . map snd . expFitWindow exponentialPhaseGrowthRateWindow
+growthRatesPerHour :: Series -> [Double]
+growthRatesPerHour = alphas . filter ((0.95 <) . fdRSqr) . map snd . expFitWindow (exponentialPhaseGrowthRateWindowHours) . G.map (mapFst (/3600))
 
-maxGrowthRate :: Series -> Double
-maxGrowthRate s
-    | null (growthRates s) = 0
-    | otherwise = maximum $ growthRates s
+maxGrowthRatePerHour :: Series -> Double
+maxGrowthRatePerHour s
+    | null (growthRatesPerHour s) = 0
+    | otherwise = 2 ** (mean . take 3 . reverse . sort $ growthRatesPerHour s)
 -- Alternatives are:
 -- take the maximal growth rate and use it's calculated expression level.
 -- pick a window with highest growth rate of OD/Fl and calculate the expression level on these windows.
