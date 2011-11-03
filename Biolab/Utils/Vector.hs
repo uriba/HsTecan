@@ -15,7 +15,7 @@ where
 import qualified Data.Vector.Generic as G
 import qualified Data.Vector.Unboxed as U
 import qualified Statistics.Sample as S
-import Statistics.LinearRegression (linearRegressionRSqr)
+import Biolab.Utils.LinearRegression (linearRegressionRSqr)
 import Data.Maybe (fromMaybe)
 import Control.Applicative (pure)
 import Biolab.Patches (mapFst, mapSnd)

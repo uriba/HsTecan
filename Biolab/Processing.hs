@@ -11,7 +11,7 @@ import Statistics.LinearRegression (linearRegressionRSqr)
 import qualified Data.Vector.Generic as G
 import Biolab.Utils.Vector
 import Biolab.Types
-import Biolab.Patches (mean)
+import Biolab.Patches (mean, isLegal)
 import Biolab.Constants
 import Data.Maybe (fromJust)
 import Data.List (sort, find, maximumBy, genericDrop)
@@ -37,9 +37,9 @@ realTime :: Seconds -> Series -> Series
 realTime s = vxMap (-(fromIntegral s) +)
 
 expressionLevelEstimate :: Seconds -> Series -> Series -> Double
-expressionLevelEstimate mat_time ods fs =  mean . map snd . filter (not . isNaN . snd) . zipWith expressionLevel (fit_data ods) $ (fit_data real_time_fs)
+expressionLevelEstimate mat_time ods fs =  mean . map snd . filter (isLegal . snd) . zipWith expressionLevel (fit_data ods) $ (fit_data real_time_fs)
     where
-        range = findRange mat_time ods real_time_fs
+        range = findRange (floor exponentialPhaseGrowthRateWindow) ods real_time_fs
         real_time_fs = realTime mat_time fs
         fit_data = map snd . subRange range . stdFits
 
@@ -59,6 +59,6 @@ findRange :: Seconds -> Series -> Series -> (Double,Double)
 findRange r s1 s2 = fromJust . find ((rng <=) . range) . map (overlapping_range s1 s2) $ thresholds s1 s2
     where
         interval s = floor $ (fst . G.head . G.tail $ s) - (fst . G.head $ s)
-        thresholds s1 s2 = genericDrop (2 * r `div` interval s1) . reverse . sort . map snd $ (G.toList s1 ++ G.toList s2)
+        thresholds s1 s2 = genericDrop (2 * r `div` interval s1) . reverse . sort . filter isLegal . map snd $ (G.toList s1 ++ G.toList s2)
         overlapping_range s1 s2 t = maximumBy (compare `on` range) $ (0,0) : intersectingRanges (ranges (> t) s1) (ranges (> t) s2)
         rng = fromIntegral r
