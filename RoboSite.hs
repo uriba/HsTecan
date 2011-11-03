@@ -2,7 +2,6 @@
 import Yesod
 import Text.Hamlet
 import Text.Julius
-import Text.Cassius
 import Yesod.Form.Fields (fileAFormReq)
 import Yesod.Form.Jquery
 import Database.HDBC.MySQL
