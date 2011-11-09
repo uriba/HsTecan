@@ -11,12 +11,15 @@ import Data.List (nub, find, sort)
 import Data.Maybe (isJust, fromJust, fromMaybe)
 import Math.Combinatorics.Graph (combinationsOf)
 import RoboDB (ExpDesc(..), PlateDesc(..), readTable, dbConnectInfo, loadExpDataDB)
-import RoboLib (timedMesData, timedMesToOdData, intensityGridData, PlotGridData, TimedPlotLinesData)
+import RoboLib (timedMesData, timedExpLevels, intensityGridData, PlotGridData, TimedPlotLinesData)
 import RoboCSV (linesDataToCSV, gridDataToCSV)
 import Biolab.Smoothing (bFiltS, smoothAll)
-import Biolab.Types (Measurement(..), ExpId, MType)
+import Biolab.Types (Measurement(..), ExpId, MType, ldMap)
+import Biolab.Patches (mapSnd, mean)
 import qualified Data.Text as T
 import qualified Data.Map as M
+import Data.Map ((!))
+import qualified Data.Vector.Generic as G
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.ByteString.UTF8 as U
 import qualified Text.JSON as J
@@ -95,7 +98,18 @@ getGridGraphData :: ExpId -> Plate -> MType -> MType -> IO PlotGridData
 getGridGraphData exp plate x y = do
     exp_data <- liftIO $ loadExpDataDB exp (read plate)
     let sms = smoothAll bFiltS exp_data
-    return $ intensityGridData sms (x,y) (logBase 10, logBase 10)
+    let igd = intensityGridData sms (x,y) 
+{-    putStrLn "avg is:"
+    let as = concatMap M.elems [igd ! "AA",igd ! "AC",igd ! "AD"]
+    let cs = concatMap M.elems [igd ! "CA",igd ! "CC",igd ! "CD"]
+    let ds = concatMap M.elems [igd ! "DA",igd ! "DC",igd ! "DD"]
+    let newmap = [("As", as), ("Cs", cs), ("Ds", ds)]
+    let avgs = map (mapSnd $ (\cds -> (mean . filter ((70<)) . filter ((100>)) . map fst $ cds, mean . map snd $ cds))) newmap
+    mapM (putStrLn . show) $ avgs
+    putStrLn "median is:"
+    let medians = map (mapSnd (\cds -> drop (length cds `div` 2) . sort . map fst $ cds)) newmap
+    mapM (putStrLn . show) $ medians -}
+    return $ igd
 
 getGridGraphCSV :: ExpId -> Plate -> MType -> MType -> Handler RepHtml
 getGridGraphCSV exp plate x y = do
@@ -116,12 +130,12 @@ getExpLevelData :: ExpId -> Plate -> MType -> IO TimedPlotLinesData
 getExpLevelData exp plate t = do
     exp_data <- liftIO $ loadExpDataDB exp (read plate)
     let sms = smoothAll bFiltS exp_data
-    return $ timedMesToOdData sms t Nothing
+    return $ timedExpLevels t sms
 
 getExpLevelCSV :: ExpId -> Plate -> MType -> Handler RepHtml
 getExpLevelCSV exp plate t = do
     pd <- liftIO $ getExpLevelData exp plate t
-    let bytes = linesDataToCSV . M.map (M.map (map fst)) $ pd
+    let bytes = linesDataToCSV . ldMap (G.toList . G.map snd) $ pd
     sendResponse (typePlain, toContent bytes)
 
 getExpLevelGraph :: ExpId -> Plate -> MType -> Handler RepHtml
@@ -142,7 +156,7 @@ getReadGraphData exp plate t = do
 getReadGraphCSV :: ExpId -> Plate -> MType -> Handler RepHtml
 getReadGraphCSV exp plate t = do
     pd <- liftIO $ getReadGraphData exp plate t
-    let bytes = linesDataToCSV . M.map (M.map (map fst)) $ pd
+    let bytes = linesDataToCSV . ldMap (G.toList . G.map snd) $ pd
     sendResponse (typePlain, toContent bytes)
 
 getLogReadGraph :: ExpId -> Plate -> MType -> Handler RepHtml
@@ -154,7 +168,7 @@ getReadGraph = getTransformedReadGraph id ""
 getTransformedReadGraph :: (Double -> Double) -> String -> ExpId -> Plate -> MType -> Handler RepHtml
 getTransformedReadGraph f desc exp plate t = do
     pd <- liftIO $ getReadGraphData exp plate t
-    let mpd = M.map (M.map (map (\(x,y) -> (f x,y)))) pd
+    let mpd = ldMap (G.map (mapSnd f)) pd
     let div_obj = "container"
     let page_title = t ++ ", " ++ plate ++ " - " ++ exp
     let title = "Measurement data of " ++ t ++ " - " ++ desc

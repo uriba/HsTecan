@@ -13,9 +13,11 @@ module HighChartsJson (
 where
 import qualified Text.JSON as J
 import qualified Data.Map as M
+import qualified Data.Vector.Generic as G
 import Text.Printf (printf)
 import RoboLib (PlotGridData, wellStr)
 import Biolab.Types (Well(..), Label, ColonyId(..))
+import Biolab.Utils.Vector
 import Data.Maybe (fromMaybe, fromJust)
 import Data.DateTime (toSeconds, DateTime)
 
@@ -113,20 +115,20 @@ gridPoint s (i,l) (cid,(x,y)) = J.makeObj [
     where
         name = l ++ " - " ++ (wellStr . cWell $ cid)
 
-linesChartSeries :: M.Map Label (M.Map ColonyId [(Double,DateTime)]) -> [JSObj]
+linesChartSeries :: M.Map Label (M.Map ColonyId Series) -> [JSObj]
 linesChartSeries pd = [("series", J.JSArray . concatMap (labelLinesSeries (M.size pd)) $ M.toList . indexedLables $ pd)]
     
-labelLinesSeries :: Int -> ((Int,Label), (M.Map ColonyId [(Double,DateTime)])) -> [J.JSValue]
+labelLinesSeries :: Int -> ((Int,Label), (M.Map ColonyId Series)) -> [J.JSValue]
 labelLinesSeries s (l,vm) = map (lineSeries s l) . M.toList $ vm
 
-lineSeries :: Int -> (Int,Label) -> (ColonyId, [(Double, DateTime)]) -> J.JSValue
+lineSeries :: Int -> (Int,Label) -> (ColonyId, Series) -> J.JSValue
 lineSeries s (i,l) (cid,vals) = J.makeObj [
     ("name", jsonString name),
     ("color", colorsArray s !! i),
     ("data", J.showJSONs jsvals)]
     where
         name = l ++ " - " ++ (wellStr . cWell $ cid)
-        jsvals = map (\(x,y) -> J.showJSONs [fromIntegral $ toSeconds y * 1000,x]) vals
+        jsvals = map (\(x,y) -> J.showJSONs [x * 1000,y]) . G.toList $ vals
 
 colorsArray :: (Integral a) => a -> [J.JSValue]
 colorsArray x = map (rgbColor . (\c -> (fromIntegral c) / fromIntegral x)) [1..x]

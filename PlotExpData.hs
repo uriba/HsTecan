@@ -39,20 +39,11 @@ plotMesApp ed mfn t = do
     let file_data = linesDataToCSV $ pd
     writeFile dfn file_data
 
-plotMesToODApp :: ExpData -> Maybe FilePath -> String -> IO ()
-plotMesToODApp ed mfn t = do
-    let pd = mesToOdData ed t Nothing
-    let	ofn = fmap (\x -> x ++ t ++ "toOD.svg") mfn
-    plotData t pd ofn
-    let	dfn = (fromMaybe ("graph") mfn) ++ t ++ "toODdata.csv"
-    let file_data = linesDataToCSV $ pd
-    writeFile dfn file_data
-
 plotGridApp :: ExpData -> (String,String) -> Maybe FilePath -> IO ()
 plotGridApp ed axes mfn = do
     let ofn = fmap (\x -> x ++ "grid.svg") mfn
-    plotIntensityGrid ed axes (logBase 10, logBase 10) ofn
-    let igd = intensityGridData ed axes noTrans
+    plotIntensityGrid ed axes ofn
+    let igd = intensityGridData ed axes
     let	dfn = (fromMaybe ("graph") mfn) ++ "Griddata.csv"
     let file_data = gridDataToCSV $ igd
     writeFile dfn file_data
@@ -75,7 +66,6 @@ main = do
     let mes_types = intersect (expMesTypes ms) ["MCHERRY","YFP","CFP"]
     mapM_ (plotMesApp ms (optOutput opt)) $ "OD600":mes_types
     let sms = smoothAll bFiltS ms
-    mapM_ (plotMesToODApp sms (optOutput opt)) mes_types
     if (mes_types `has` (fst . optAxes $ opt)) && (mes_types `has` (snd . optAxes $ opt))
 	then plotGridApp sms (optAxes opt) (optOutput opt)
 	else return ()

@@ -15,7 +15,7 @@ main = do
     let test1od = U.fromList . zip times $ values
     putStrLn $ "times are:" ++ (show times)
     putStrLn $ "values are:" ++ (show values)
-    putStrLn $ "calculated growth is:" ++ (show . maxGrowthRate $ test1od)
+    putStrLn $ "calculated growth is:" ++ (show . maxGrowthRatePerHour $ test1od)
     putStrLn "sanity checking - create a vector with double the values of the od, with maturation time offset, and check the expression level"
     let fl_times = map (+ (fromIntegral maturationTime)) times
     let fl_values = map (*5) values

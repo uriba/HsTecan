@@ -27,9 +27,6 @@ plotData title pld m_fn = do
 plotMesData :: ExpData -> MType -> Maybe FilePath -> IO()
 plotMesData ed  mt m_fn = plotData mt (mesData ed mt) m_fn
 
-plotMesToOD :: ExpData -> MType -> Maybe (Int, Int) -> Maybe FilePath -> IO()
-plotMesToOD ed mt m_range m_fn = plotData (mt ++ " to OD") (mesToOdData ed mt m_range) m_fn
-
 plotGrid :: String -> PlotGridData -> (String,String) -> Maybe FilePath -> IO ()
 plotGrid title pgd (xtype,ytype) m_fn = plotPathsStyle plot_attrs plot_lines
     where
@@ -38,10 +35,10 @@ plotGrid title pgd (xtype,ytype) m_fn = plotPathsStyle plot_attrs plot_lines
 	labeled_grid_points = [ (label,M.elems pm) | (label,pm) <- M.toList pgd ]
 	plot_lines = zipWith makePlotGridData labeled_grid_points [1..]
 
-plotIntensityGrid :: ExpData -> (String, String) -> AxesTrans -> Maybe FilePath -> IO ()
-plotIntensityGrid ed axes fs m_fn = plotGrid "Log scale grid plot" pgd axes m_fn
+plotIntensityGrid :: ExpData -> (String, String) -> Maybe FilePath -> IO ()
+plotIntensityGrid ed axes m_fn = plotGrid "Log scale grid plot" pgd axes m_fn
     where
-	pgd = intensityGridData ed axes fs
+	pgd = intensityGridData ed axes
 
 fileOpts :: String -> [Attribute]
 fileOpts fn = [ Custom "terminal" ["png", "size 1000,1000"], Custom "output" ["\"" ++ fn ++ "\""]]

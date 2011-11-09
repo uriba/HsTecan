@@ -1,7 +1,8 @@
 {-# LANGUAGE FlexibleContexts, FlexibleInstances, UndecidableInstances, MultiParamTypeClasses #-}
 module Biolab.Processing (
     -- Biology related functions:
-    maxGrowthRatePerHour,
+    minDoublingTimeMinutes,
+    doublingTimeMinutes,
     expressionLevelEstimate,
     expressionLevels,
 )
@@ -11,25 +12,22 @@ import Statistics.LinearRegression (linearRegressionRSqr)
 import qualified Data.Vector.Generic as G
 import Biolab.Utils.Vector
 import Biolab.Types
-import Biolab.Patches (mean, isLegal, mapFst)
+import Biolab.Patches (mean, isLegal, mapFst, mapSnd)
 import Biolab.Constants
 import Data.Maybe (fromJust)
 import Data.List (sort, find, maximumBy, genericDrop)
 import Data.Function (on)
 
 -- this file should contain Biology specific functionality.
-alphas :: [FitData] -> [Double]
-alphas = map fdAlpha
-
-exponentialPhaseGrowthRateWindowHours = exponentialPhaseGrowthRateWindow / 3600
+exponentialPhaseGrowthRateWindowMinutes = exponentialPhaseGrowthRateWindow / 60
 -- estimate max growth rate based on steepest slope of linear fit in log space of the OD, running on a predefined length window.
-growthRatesPerHour :: Series -> [Double]
-growthRatesPerHour = alphas . filter ((0.95 <) . fdRSqr) . map snd . expFitWindow (exponentialPhaseGrowthRateWindowHours) . G.map (mapFst (/3600))
+doublingTimeMinutes :: Series -> Series
+doublingTimeMinutes = G.fromList . filter ((10<) . snd) . map (mapSnd ((/60) . (1/) .  fdAlpha)) . filter ((0.90 <)  . fdRSqr . snd) . expFitWindow exponentialPhaseGrowthRateWindow
 
-maxGrowthRatePerHour :: Series -> Double
-maxGrowthRatePerHour s
-    | null (growthRatesPerHour s) = 0
-    | otherwise = 2 ** (mean . take 3 . reverse . sort $ growthRatesPerHour s)
+minDoublingTimeMinutes :: Series -> Double
+minDoublingTimeMinutes s
+    | G.null (doublingTimeMinutes s) = 0
+    | otherwise = G.minimum . G.drop 2 . G.map snd . doublingTimeMinutes $ s
 -- Alternatives are:
 -- take the maximal growth rate and use it's calculated expression level.
 -- pick a window with highest growth rate of OD/Fl and calculate the expression level on these windows.
