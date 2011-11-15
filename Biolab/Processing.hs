@@ -22,12 +22,12 @@ import Data.Function (on)
 exponentialPhaseGrowthRateWindowMinutes = exponentialPhaseGrowthRateWindow / 60
 -- estimate max growth rate based on steepest slope of linear fit in log space of the OD, running on a predefined length window.
 doublingTimeMinutes :: Series -> Series
-doublingTimeMinutes = G.fromList . filter ((10<) . snd) . map (mapSnd ((/60) . (1/) .  fdAlpha)) . filter ((0.90 <)  . fdRSqr . snd) . expFitWindow exponentialPhaseGrowthRateWindow
+doublingTimeMinutes = G.fromList . filter ((300>) . snd) . filter ((10<) . snd) . map (mapSnd ((/60) . (1/) .  fdAlpha)) . filter ((0.90 <)  . fdRSqr . snd) . expFitWindow exponentialPhaseGrowthRateWindow
 
 minDoublingTimeMinutes :: Series -> Double
 minDoublingTimeMinutes s
     | G.null (doublingTimeMinutes s) = 0
-    | otherwise = G.minimum . G.drop 2 . G.map snd . doublingTimeMinutes $ s
+    | otherwise = minimum . drop 2 . map snd . G.toList . doublingTimeMinutes $ s
 -- Alternatives are:
 -- take the maximal growth rate and use it's calculated expression level.
 -- pick a window with highest growth rate of OD/Fl and calculate the expression level on these windows.
