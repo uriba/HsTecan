@@ -76,13 +76,13 @@ type AxesTrans = ((Double -> Double),(Double -> Double))
 noTrans = (id,id)
 
 intensityGridData :: ExpData -> (String,String) -> PlotGridData
-intensityGridData ed (x,"OD600") = intensityGridData ed ("OD600",x)
-intensityGridData ed ("OD600",ytype) = grid_points
+intensityGridData ed ("OD600",y) = intensityGridData ed (y, "OD600")
+intensityGridData ed (xtype,"OD600") = grid_points
     where
         ned = removeDeadWells . normalizePlate $ ed
         m_mes m = G.fromList . sortBy (compare `on` fst) . map (\x -> (fromIntegral . toSeconds . mTime $ x, mVal x)) . filter (\x -> mType x == m)
         exp_level m ms = expressionLevelEstimate maturationTime (m_mes "OD600" ms) (m_mes m ms)
-        grid_points = ldMap (\x -> (minDoublingTimeMinutes . m_mes "OD600" $ x,exp_level ytype $ x)) ned
+        grid_points = ldMap (\x -> (exp_level xtype $ x, minDoublingTimeMinutes . m_mes "OD600" $ x)) ned
 
 intensityGridData ed (xtype,ytype) = grid_points
     where
