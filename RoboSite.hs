@@ -90,7 +90,7 @@ graphPage :: String -> String -> [(String,J.JSValue)] -> Handler RepHtml
 graphPage title div chart_json = do
     let json_data = J.encode . J.makeObj $ chart_json
     defaultLayout $ do
-        setTitle "Graph"
+        setTitle . toHtml $ title
         addJulius $(juliusFile "HighChartsGraph.julius")
         addHamlet $(hamletFile "GraphPage.hamlet")
 
@@ -121,7 +121,7 @@ getGridGraph :: ExpId -> Plate -> MType -> MType -> Handler RepHtml
 getGridGraph exp plate x y = do
     igd <- liftIO $ getGridGraphData exp plate x y
     let div_obj = "container"
-    let title = "Grid data of (" ++ x ++ ", " ++ y ++ ")"
+    let title = "(" ++ x ++ ", " ++ y ++ ")" ++ " Grid"
     let subtitle = "Experiment: " ++ exp ++ ", Plate: " ++ plate
     let chart_json = [chartTitle title, chartSubtitle subtitle, chartXaxis x Nothing Nothing, chartYaxis y Nothing Nothing, gridChart div_obj, chartLegend] ++ gridChartSeries igd
     graphPage title div_obj chart_json
@@ -143,7 +143,7 @@ getExpLevelGraph exp plate t = do
     pd <- liftIO $ getExpLevelData exp plate t
     let div_obj = "container"
     let page_title = t ++ ", " ++ plate ++ " - " ++ exp
-    let title = "Expression level of " ++ t
+    let title = t ++ " Expression level"
     let subtitle = "Experiment: " ++ exp ++ ", Plate: " ++ plate
     let chart_json = [chartTitle title, chartSubtitle subtitle, chartXaxis "Time" (Just "datetime") Nothing, chartYaxis t Nothing Nothing, lineChart div_obj, chartLegend] ++ linesChartSeries pd
     graphPage title div_obj chart_json
@@ -171,7 +171,7 @@ getTransformedReadGraph f desc exp plate t = do
     let mpd = ldMap (G.map (mapSnd f)) pd
     let div_obj = "container"
     let page_title = t ++ ", " ++ plate ++ " - " ++ exp
-    let title = "Measurement data of " ++ t ++ " - " ++ desc
+    let title = t ++ " Measurement data" ++ " - " ++ desc
     let subtitle = "Experiment: " ++ exp ++ ", Plate: " ++ plate
     let chart_json = [chartTitle title, chartSubtitle subtitle, chartXaxis "Time" (Just "datetime") Nothing, chartYaxis t Nothing Nothing, lineChart div_obj, chartLegend] ++ linesChartSeries mpd
     graphPage title div_obj chart_json
