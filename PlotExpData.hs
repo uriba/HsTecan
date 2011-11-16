@@ -32,7 +32,7 @@ options = [
 
 plotMesApp :: ExpData -> Maybe FilePath -> String -> IO ()
 plotMesApp ed mfn t = do
-    let pd = mesData ed t
+    let pd = timedMesData ed t
     let	ofn = fmap (\x -> x ++ t ++ ".svg") mfn
     plotData t pd ofn 
     let	dfn = (fromMaybe ("graph") mfn) ++ t ++ "data.csv"

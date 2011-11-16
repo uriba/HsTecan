@@ -1,12 +1,9 @@
 module RoboLib (
-    mesData,
     timedMesData,
     timedExpLevels,
     intensityGridData,
-    PlotLinesData,
     TimedPlotLinesData,
     PlotGridData,
-    noTrans,
     wellStr,
     AxesTrans,
     )
@@ -27,24 +24,11 @@ import Biolab.Patches (mean, isLegal)
 import Biolab.Processing (expressionLevelEstimate, expressionLevels, minDoublingTimeMinutes, doublingTimeMinutes)
 
 -- Some types to make life easier...
-type PlotLinesData = LabeledData [Double] -- for each label - a list of colonies, for each colony - a line.
 type TimedPlotLinesData = LabeledData Series -- for each label - a list of colonies, for each colony - a line.
 type PlotGridData = LabeledData (Double,Double) -- for each label - a list of colonies, for each colony - a line.
 
-{-
-autoFluorescenceMap :: ExpData -> Maybe MesTypeCorrectionVals
-autoFluorescenceMap ed = do
-    af_colonies <- M.lookup wildTypeId ed
-    let af_mes = M.elems af_colonies
-    let af m = mean . map (expLevel' m) $ af_mes
-    return . M.fromList $ [(m, af m) | m <- expMesTypes ed]
-    -}
-
 timedMesData :: ExpData -> MType -> TimedPlotLinesData
 timedMesData ed mt = ldMap (G.fromList . map (\x -> (fromIntegral . toSeconds . mTime $ x, mVal x)) . mesByTime mt) (normalizePlate ed)
-
-mesData :: ExpData -> MType -> PlotLinesData
-mesData ed mt = ldMap (G.toList . G.map snd) . timedMesData ed $ mt
 
 removeDeadWells :: ExpData -> ExpData
 removeDeadWells = M.filter (not . M.null) . M.map (M.filter liveWell)
@@ -63,17 +47,7 @@ timedExpLevels m ed = ldMap (\x -> removeIllegalPoints . expressionLevels matura
         fl_mes m = G.fromList . map toPoint . mesByTime m
         od_mes = fl_mes "OD600"
 
-{-subtractAutoFluorescence :: ExpData -> ExpLevelData -- need adjustment for df/dt and maximum value selection
-subtractAutoFluorescence ed = ldMap (map (\(mt,vals) -> (mt, map (corrected_el mt) vals))) . expLevels $ ed
-    where
-	corrected_el mt x = fromMaybe x $ do
-	    afm <- autoFluorescenceMap ed
-	    af <- M.lookup mt afm
-	    return $ max (minValMap ! mt) (x - af)
--}
 type AxesTrans = ((Double -> Double),(Double -> Double))
-
-noTrans = (id,id)
 
 intensityGridData :: ExpData -> (String,String) -> PlotGridData
 intensityGridData ed ("OD600",y) = intensityGridData ed (y, "OD600")

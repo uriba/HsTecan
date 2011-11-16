@@ -6,26 +6,28 @@ where
 
 import Graphics.Gnuplot.Simple
 import Biolab.Types (ExpData(..), MType)
+import Biolab.Utils.Vector (Point)
 import RoboLib
 import qualified Data.Map as M
+import qualified Data.Vector.Generic as G
 import Data.Maybe (fromMaybe)
 
-makePlotData :: (String, [[Double]]) -> Int -> [(PlotStyle, [Double])]
+makePlotData :: (String, [[Point]]) -> Int -> [(PlotStyle, [Point])]
 makePlotData (desc, vals) c = [ (defaultStyle {lineSpec = CustomStyle [LineTitle desc, LineType c]},x) | x <- vals ]
 
 makePlotGridData :: (String,[(Double,Double)]) -> Int -> (PlotStyle, [(Double,Double)])
 makePlotGridData (label,points) c =
     (defaultStyle {plotType = Points, lineSpec = CustomStyle [LineTitle label, PointType c, PointSize 2]},points)
 
-plotData :: String -> PlotLinesData -> Maybe FilePath -> IO ()
+plotData :: String -> TimedPlotLinesData -> Maybe FilePath -> IO ()
 plotData title pld m_fn = do
-    let by_label = [ (label, M.elems x) | (label,x) <- M.toList pld ]
+    let by_label = [ (label, map G.toList . M.elems $ x) | (label,x) <- M.toList pld ]
     let plot_data = concat . zipWith makePlotData by_label $ [1..]
     let fileoptions = fromMaybe [] . fmap fileOpts $ m_fn
-    plotListsStyle ([Title title] ++ fileoptions) plot_data
+    plotPathsStyle ([Title title] ++ fileoptions) plot_data
 
-plotMesData :: ExpData -> MType -> Maybe FilePath -> IO()
-plotMesData ed  mt m_fn = plotData mt (mesData ed mt) m_fn
+plotTimedMesData :: ExpData -> MType -> Maybe FilePath -> IO()
+plotTimedMesData ed  mt m_fn = plotData mt (timedMesData ed mt) m_fn
 
 plotGrid :: String -> PlotGridData -> (String,String) -> Maybe FilePath -> IO ()
 plotGrid title pgd (xtype,ytype) m_fn = plotPathsStyle plot_attrs plot_lines

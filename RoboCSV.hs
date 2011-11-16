@@ -7,14 +7,16 @@ where
 import Text.ParserCombinators.Parsec
 import Data.CSV
 import Data.Either (rights)
-import RoboLib (PlotGridData, PlotLinesData)
+import RoboLib (PlotGridData, TimedPlotLinesData)
 import Data.DateTime (fromSeconds, toSqlString)
 import Data.List (nub)
 import Data.Function (on)
 import Data.Map (Map)
 import qualified Data.Map as M
+import qualified Data.Vector.Generic as G
 import Biolab.Constants (maxMes)
 import Biolab.Types
+import Biolab.Utils.Vector (Series)
 import Biolab.Measurement (wellFromInts)
 import Biolab.ExpData (createExpData)
 
@@ -39,19 +41,21 @@ readExpLine m = Measurement {
 		}
 
 -- utils for outputting plot data to files
-linesData :: (String,Map ColonyId [Double]) -> [[String]]
+linesData :: (String,Map ColonyId Series) -> [[String]]
 linesData (label,lines) = map (lineData label) . M.toList $ lines
 
-lineData :: String -> (ColonyId,[Double]) -> [String]
-lineData label (cid,points) = [
+lineData :: String -> (ColonyId,Series) -> [String]
+lineData label (cid,pts) = [
 	label,
 	cExp cid,
 	show . cPlate $ cid,
 	[wRow . cWell $ cid],
 	show . wColumn . cWell $ cid
     ] ++ map show points
+    where
+        points = G.toList pts
 
-linesDataToCSV :: PlotLinesData -> String
+linesDataToCSV :: TimedPlotLinesData -> String
 linesDataToCSV = genCsvFile . concatMap linesData . M.toList
 
 pointsData :: (String,Map ColonyId (Double,Double)) -> [[String]]

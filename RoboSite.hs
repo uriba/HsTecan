@@ -135,7 +135,7 @@ getExpLevelData exp plate t = do
 getExpLevelCSV :: ExpId -> Plate -> MType -> Handler RepHtml
 getExpLevelCSV exp plate t = do
     pd <- liftIO $ getExpLevelData exp plate t
-    let bytes = linesDataToCSV . ldMap (G.toList . G.map snd) $ pd
+    let bytes = linesDataToCSV pd
     sendResponse (typePlain, toContent bytes)
 
 getExpLevelGraph :: ExpId -> Plate -> MType -> Handler RepHtml
@@ -156,7 +156,7 @@ getReadGraphData exp plate t = do
 getReadGraphCSV :: ExpId -> Plate -> MType -> Handler RepHtml
 getReadGraphCSV exp plate t = do
     pd <- liftIO $ getReadGraphData exp plate t
-    let bytes = linesDataToCSV . ldMap (G.toList . G.map snd) $ pd
+    let bytes = linesDataToCSV pd
     sendResponse (typePlain, toContent bytes)
 
 getLogReadGraph :: ExpId -> Plate -> MType -> Handler RepHtml
