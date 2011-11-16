@@ -1,4 +1,4 @@
-module RoboDB (
+module Biolab.Interfaces.MySql (
     DbReadable(..),
     ExpDesc(..),
     PlateDesc(..),
@@ -23,6 +23,8 @@ import Biolab.Measurement (wellFromInts)
 import Biolab.ExpData (createExpData)
 import Data.List (find)
 
+-- should be exported to a configuration file, and received by functions.
+-- consider adding table names to configuration file as well.
 dbConnectInfo = MySQLConnectInfo {
     mysqlHost = "132.77.80.238",
     mysqlUser = "ronm",

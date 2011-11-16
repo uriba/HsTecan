@@ -1,15 +1,13 @@
-module RoboCSV (
+module Biolab.Interfaces.Csv (
     loadExpData,
-    linesDataToCSV,
-    gridDataToCSV,
+    processedDataToCSV,
+    correlationDataToCSV,
 )
 where
 import Text.ParserCombinators.Parsec
 import Data.CSV
 import Data.Either (rights)
-import RoboLib (PlotGridData, TimedPlotLinesData)
 import Data.DateTime (fromSeconds, toSqlString)
-import Data.List (nub)
 import Data.Function (on)
 import Data.Map (Map)
 import qualified Data.Map as M
@@ -41,37 +39,22 @@ readExpLine m = Measurement {
 		}
 
 -- utils for outputting plot data to files
-linesData :: (String,Map ColonyId Series) -> [[String]]
-linesData (label,lines) = map (lineData label) . M.toList $ lines
+processedDataToCSV :: ProcessedData -> String
+processedDataToCSV = exportedDataToCSV . ldMap (map show . G.toList)
 
-lineData :: String -> (ColonyId,Series) -> [String]
-lineData label (cid,pts) = [
-	label,
-	cExp cid,
-	show . cPlate $ cid,
-	[wRow . cWell $ cid],
-	show . wColumn . cWell $ cid
-    ] ++ map show points
-    where
-        points = G.toList pts
+correlationDataToCSV :: CorrelationData -> String
+correlationDataToCSV = exportedDataToCSV . ldMap (\(x,y) -> [show x, show y])
 
-linesDataToCSV :: TimedPlotLinesData -> String
-linesDataToCSV = genCsvFile . concatMap linesData . M.toList
+toLines :: (ColonyId, [String]) -> [String]
+toLines (cid,xs) = [
+    cExp cid,
+    show . cPlate $ cid,
+    [wRow . cWell $ cid],
+    show . wColumn . cWell $ cid
+    ] ++ xs
 
-pointsData :: (String,Map ColonyId (Double,Double)) -> [[String]]
-pointsData (label,points) = map (pointData label) . M.toList $ points
+labelLines :: (String, Map ColonyId [String]) -> [[String]]
+labelLines (label,lines) = zipWith (:) (repeat label) . map toLines . M.toList $ lines
 
-pointData :: String -> (ColonyId,(Double,Double)) -> [String]
-pointData label (cid,(x,y)) = [
-	label,
-	cExp cid,
-	show . cPlate $ cid,
-	[wRow . cWell $ cid],
-	show . wColumn . cWell $ cid,
-	show x,
-	show y
-    ]
-
-gridDataToCSV :: PlotGridData -> String
-gridDataToCSV = genCsvFile . concatMap pointsData . M.toList
-	    
+exportedDataToCSV :: ExportedData -> String
+exportedDataToCSV = genCsvFile . concatMap labelLines . M.toList

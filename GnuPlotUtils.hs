@@ -5,7 +5,7 @@ module GnuPlotUtils (
 where
 
 import Graphics.Gnuplot.Simple
-import Biolab.Types (ExpData(..), MType)
+import Biolab.Types (ExpData(..), MType, ProcessedData, CorrelationData)
 import Biolab.Utils.Vector (Point)
 import RoboLib
 import qualified Data.Map as M
@@ -19,7 +19,7 @@ makePlotGridData :: (String,[(Double,Double)]) -> Int -> (PlotStyle, [(Double,Do
 makePlotGridData (label,points) c =
     (defaultStyle {plotType = Points, lineSpec = CustomStyle [LineTitle label, PointType c, PointSize 2]},points)
 
-plotData :: String -> TimedPlotLinesData -> Maybe FilePath -> IO ()
+plotData :: String -> ProcessedData -> Maybe FilePath -> IO ()
 plotData title pld m_fn = do
     let by_label = [ (label, map G.toList . M.elems $ x) | (label,x) <- M.toList pld ]
     let plot_data = concat . zipWith makePlotData by_label $ [1..]
@@ -29,7 +29,7 @@ plotData title pld m_fn = do
 plotTimedMesData :: ExpData -> MType -> Maybe FilePath -> IO()
 plotTimedMesData ed  mt m_fn = plotData mt (timedMesData ed mt) m_fn
 
-plotGrid :: String -> PlotGridData -> (String,String) -> Maybe FilePath -> IO ()
+plotGrid :: String -> CorrelationData -> (String,String) -> Maybe FilePath -> IO ()
 plotGrid title pgd (xtype,ytype) m_fn = plotPathsStyle plot_attrs plot_lines
     where
 	file_options = fromMaybe [] . fmap fileOpts $ m_fn

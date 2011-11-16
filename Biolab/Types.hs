@@ -12,12 +12,17 @@ module Biolab.Types (
     ExpData,
     colonyId,
     Seconds,
+    ProcessedData,
+    CorrelationData,
+    PlotData,
+    ExportedData,
 )
 where
 
 import Data.Map (Map)
 import qualified Data.Map as M
 import Data.DateTime (DateTime)
+import Biolab.Utils.Vector (Series)
 
 type Seconds = Integer
 type MType = String
@@ -60,3 +65,7 @@ ldMap :: (a -> b) -> LabeledData a -> LabeledData b
 ldMap f = M.map (M.map f)
 
 type ExpData = LabeledData [Measurement] -- experiment data is mapped like this.
+type ProcessedData = LabeledData Series -- for each label - a list of colonies, for each colony - a line.
+type CorrelationData = LabeledData (Double,Double) -- for each label - a list of colonies, for each colony - a line.
+type ExportedData = LabeledData [String]
+data PlotData = LinesData ProcessedData | GridData CorrelationData

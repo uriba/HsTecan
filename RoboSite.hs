@@ -10,11 +10,11 @@ import Data.ByteString.UTF8 (toString)
 import Data.List (nub, find, sort)
 import Data.Maybe (isJust, fromJust, fromMaybe)
 import Math.Combinatorics.Graph (combinationsOf)
-import RoboDB (ExpDesc(..), PlateDesc(..), readTable, dbConnectInfo, loadExpDataDB)
-import RoboLib (timedMesData, timedExpLevels, intensityGridData, PlotGridData, TimedPlotLinesData)
-import RoboCSV (linesDataToCSV, gridDataToCSV)
+import Biolab.Interfaces.MySql (ExpDesc(..), PlateDesc(..), readTable, dbConnectInfo, loadExpDataDB)
+import RoboLib (timedMesData, timedExpLevels, intensityGridData)
+import Biolab.Interfaces.Csv (processedDataToCSV, correlationDataToCSV)
 import Biolab.Smoothing (bFiltS, smoothAll)
-import Biolab.Types (Measurement(..), ExpId, MType, ldMap)
+import Biolab.Types (Measurement(..), ExpId, MType, ldMap, CorrelationData, ProcessedData)
 import Biolab.Patches (mapSnd, mean)
 import qualified Data.Text as T
 import qualified Data.Map as M
@@ -94,7 +94,7 @@ graphPage title div chart_json = do
         addJulius $(juliusFile "HighChartsGraph.julius")
         addHamlet $(hamletFile "GraphPage.hamlet")
 
-getGridGraphData :: ExpId -> Plate -> MType -> MType -> IO PlotGridData
+getGridGraphData :: ExpId -> Plate -> MType -> MType -> IO CorrelationData
 getGridGraphData exp plate x y = do
     exp_data <- liftIO $ loadExpDataDB exp (read plate)
     let sms = smoothAll bFiltS exp_data
@@ -114,7 +114,7 @@ getGridGraphData exp plate x y = do
 getGridGraphCSV :: ExpId -> Plate -> MType -> MType -> Handler RepHtml
 getGridGraphCSV exp plate x y = do
     igd <- liftIO $ getGridGraphData exp plate x y
-    let bytes = gridDataToCSV $ igd
+    let bytes = correlationDataToCSV $ igd
     sendResponse (typePlain, toContent bytes)
 
 getGridGraph :: ExpId -> Plate -> MType -> MType -> Handler RepHtml
@@ -126,7 +126,7 @@ getGridGraph exp plate x y = do
     let chart_json = [chartTitle title, chartSubtitle subtitle, chartXaxis x Nothing Nothing, chartYaxis y Nothing Nothing, gridChart div_obj, chartLegend] ++ gridChartSeries igd
     graphPage title div_obj chart_json
 
-getExpLevelData :: ExpId -> Plate -> MType -> IO TimedPlotLinesData
+getExpLevelData :: ExpId -> Plate -> MType -> IO ProcessedData
 getExpLevelData exp plate t = do
     exp_data <- liftIO $ loadExpDataDB exp (read plate)
     let sms = smoothAll bFiltS exp_data
@@ -135,7 +135,7 @@ getExpLevelData exp plate t = do
 getExpLevelCSV :: ExpId -> Plate -> MType -> Handler RepHtml
 getExpLevelCSV exp plate t = do
     pd <- liftIO $ getExpLevelData exp plate t
-    let bytes = linesDataToCSV pd
+    let bytes = processedDataToCSV pd
     sendResponse (typePlain, toContent bytes)
 
 getExpLevelGraph :: ExpId -> Plate -> MType -> Handler RepHtml
@@ -148,7 +148,7 @@ getExpLevelGraph exp plate t = do
     let chart_json = [chartTitle title, chartSubtitle subtitle, chartXaxis "Time" (Just "datetime") Nothing, chartYaxis t Nothing Nothing, lineChart div_obj, chartLegend] ++ linesChartSeries pd
     graphPage title div_obj chart_json
 
-getReadGraphData :: ExpId -> Plate -> MType -> IO TimedPlotLinesData
+getReadGraphData :: ExpId -> Plate -> MType -> IO ProcessedData
 getReadGraphData exp plate t = do
     exp_data <- liftIO $ loadExpDataDB exp (read plate)
     return $ timedMesData exp_data t
@@ -156,7 +156,7 @@ getReadGraphData exp plate t = do
 getReadGraphCSV :: ExpId -> Plate -> MType -> Handler RepHtml
 getReadGraphCSV exp plate t = do
     pd <- liftIO $ getReadGraphData exp plate t
-    let bytes = linesDataToCSV pd
+    let bytes = processedDataToCSV pd
     sendResponse (typePlain, toContent bytes)
 
 getLogReadGraph :: ExpId -> Plate -> MType -> Handler RepHtml

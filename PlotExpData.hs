@@ -1,5 +1,5 @@
 import RoboLib
-import RoboCSV
+import Biolab.Interfaces.Csv (processedDataToCSV, correlationDataToCSV, loadExpData)
 import Biolab.Smoothing
 import Biolab.Patches (has)
 import Biolab.ExpData (expMesTypes)
@@ -36,7 +36,7 @@ plotMesApp ed mfn t = do
     let	ofn = fmap (\x -> x ++ t ++ ".svg") mfn
     plotData t pd ofn 
     let	dfn = (fromMaybe ("graph") mfn) ++ t ++ "data.csv"
-    let file_data = linesDataToCSV $ pd
+    let file_data = processedDataToCSV $ pd
     writeFile dfn file_data
 
 plotGridApp :: ExpData -> (String,String) -> Maybe FilePath -> IO ()
@@ -45,7 +45,7 @@ plotGridApp ed axes mfn = do
     plotIntensityGrid ed axes ofn
     let igd = intensityGridData ed axes
     let	dfn = (fromMaybe ("graph") mfn) ++ "Griddata.csv"
-    let file_data = gridDataToCSV $ igd
+    let file_data = correlationDataToCSV $ igd
     writeFile dfn file_data
 
 processOpt :: [String] -> Options

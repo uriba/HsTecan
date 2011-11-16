@@ -1,5 +1,5 @@
 import RoboLib
-import RoboDB
+import Biolab.Interfaces.MySql (readTable, edExp, loadExpDataDB)
 import Biolab.Types (Measurement (..), ExpData, Well(..), ColonyId(..))
 import Biolab.ExpData (normalizePlate)
 import Biolab.Patches (mapSnd)
