@@ -160,7 +160,7 @@ getReadGraphCSV exp plate t = do
     sendResponse (typePlain, toContent bytes)
 
 getLogReadGraph :: ExpId -> Plate -> MType -> Handler RepHtml
-getLogReadGraph = getTransformedReadGraph (logBase 10) "Log scale"
+getLogReadGraph = getTransformedReadGraph (logBase 2) "Log scale"
 
 getReadGraph :: ExpId -> Plate -> MType -> Handler RepHtml
 getReadGraph = getTransformedReadGraph id ""

@@ -15,7 +15,7 @@ import qualified Data.Map as M
 import qualified Data.Vector.Generic as G
 import Biolab.Constants
 import Biolab.Types
-import Biolab.Measurement (mesByTime, valByTime, filterBy)
+import Biolab.Measurement (mesByTime, valByTime, filterBy, toPoint)
 import Biolab.ExpData
 import Biolab.Utils.Vector (Series, Point)
 import Biolab.Patches (mean, isLegal)
@@ -30,9 +30,6 @@ removeDeadWells :: ExpData -> ExpData
 removeDeadWells = M.filter (not . M.null) . M.map (M.filter liveWell)
 
 removeIllegalPoints = G.filter (isLegal . snd)
-
-toPoint :: Measurement -> Point
-toPoint x = (fromIntegral . toSeconds . mTime $ x, mVal x)
 
 timedExpLevels :: MType -> ExpData -> ProcessedData
 timedExpLevels "OD600" ed = ldMap (\x -> removeIllegalPoints . doublingTimeMinutes . od_mes $ x) . normalizePlate  $ ed

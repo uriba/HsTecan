@@ -7,6 +7,7 @@ module Biolab.Constants (
     stdMinOd,
     exponentialPhaseGrowthRateWindow,
     maturationTime,
+    bubbleTime,
 )
 
 where
@@ -26,6 +27,8 @@ minValMap = fromList [("OD600",0.005), ("YFP", 20), ("MCHERRY",10),("CFP",10), (
 
 odLiveThreshold = 0.05
 stdMinOd = 0.04
+bubbleTime = 7200 -- the time since the beginnig of the experiment during which OD values might be affected by condensation
+
 
 -- biological constants
 exponentialPhaseGrowthRateWindow :: Double

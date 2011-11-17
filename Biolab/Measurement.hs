@@ -6,13 +6,16 @@ module Biolab.Measurement (
     valByTime,
     mesByTime,
     wellFromInts,
+    toPoint,
 )
 where
 
 import Biolab.Types
+import Biolab.Utils.Vector (Point)
 import Biolab.Constants
 import Data.List (sortBy, nub)
 import Data.Function (on)
+import Data.DateTime (toSeconds)
 import qualified Data.ListLike as LL
 
 filterBy :: (Eq b, LL.ListLike full a) => (a -> b) -> b -> full -> full
@@ -29,6 +32,9 @@ filterByWells ws = concat . zipWith filterByWell ws . repeat
 
 valByTime :: MType -> [Measurement] -> [Double]
 valByTime mt = map mVal . mesByTime mt
+
+toPoint :: Measurement -> Point
+toPoint x = (fromIntegral . toSeconds . mTime $ x, mVal x)
 
 mesByTime :: MType -> [Measurement] -> [Measurement]
 mesByTime mt = sortBy (compare `on` mTime) . filterByType mt . verifySingleColony

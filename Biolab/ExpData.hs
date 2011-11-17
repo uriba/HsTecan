@@ -37,7 +37,11 @@ normalizePlate ed
     | otherwise = subtractConstantBackground ed
 
 liveWell :: [Measurement] -> Bool -- returns whether measurements taken from a given well indicate that it grew.
-liveWell ms = (last . valByTime "OD600" $ ms) > odLiveThreshold
+liveWell ms = odLiveThreshold < (maximum . drop bubble_length . map snd $ od_vals)
+    where
+        bubble_length = length . takeWhile (< fromIntegral bubbleTime) . map fst . norm_od_vals $ od_vals
+        od_vals = map toPoint . mesByTime "OD600" $ ms
+        norm_od_vals xs = map (\(x,y) -> (x-(fst . head $ xs), y)) $ xs
 
 createExpData :: [Measurement] -> ExpData
 createExpData ms = fromList [ (label, m_for_label label) | label <- labels ms]
@@ -46,4 +50,3 @@ createExpData ms = fromList [ (label, m_for_label label) | label <- labels ms]
 	colonies l = nub . map colonyId . filterBy mLabel l
 	m_for_colony cid = filterBy colonyId cid ms
 	m_for_label l = fromList [ (colony_id, m_for_colony colony_id) | colony_id <- colonies l ms ]
-
