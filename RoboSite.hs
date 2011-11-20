@@ -119,7 +119,8 @@ getGridGraphCSV exp plate x y = do
 
 getGridGraph :: ExpId -> Plate -> MType -> MType -> Handler RepHtml
 getGridGraph exp plate x y = do
-    igd <- liftIO $ getGridGraphData exp plate x y
+    tgd <- liftIO $ getGridGraphData exp plate x y
+    let igd = M.delete "NULL" tgd
     let div_obj = "container"
     let title = "(" ++ x ++ ", " ++ y ++ ")" ++ " Grid"
     let subtitle = "Experiment: " ++ exp ++ ", Plate: " ++ plate
@@ -167,7 +168,8 @@ getReadGraph = getTransformedReadGraph id ""
 
 getTransformedReadGraph :: (Double -> Double) -> String -> ExpId -> Plate -> MType -> Handler RepHtml
 getTransformedReadGraph f desc exp plate t = do
-    pd <- liftIO $ getReadGraphData exp plate t
+    pdt <- liftIO $ getReadGraphData exp plate t
+    let pd = M.delete "NULL" pdt
     let mpd = ldMap (G.map (mapSnd f)) pd
     let div_obj = "container"
     let page_title = t ++ ", " ++ plate ++ " - " ++ exp
