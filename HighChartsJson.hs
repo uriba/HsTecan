@@ -79,7 +79,10 @@ chartOptions :: JSObj
 chartOptions =   ("plotOptions", J.makeObj [
                     ("series", J.makeObj [
                         ("animation", J.showJSON False),
-                        ("shadow", J.showJSON False)
+                        ("shadow", J.showJSON False),
+                        ("marker", J.makeObj [
+                            ("enabled", J.showJSON False)
+                        ])
                     ])
                 ])
 
