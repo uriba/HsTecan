@@ -6,6 +6,7 @@ module HighChartsJson (
     gridChart,
     lineChart,
     chartLegend,
+    chartOptions,
     gridChartSeries,
     linesChartSeries,
     colorsArray
@@ -65,6 +66,7 @@ chart :: String -> String -> JSObj
 chart series_type html_object = ("chart", J.makeObj [
                                     ("renderTo", jsonString html_object),
                                     ("defaultSeriesType", jsonString series_type),
+                                    ("animation", J.showJSON False),
                                     ("zoomType", jsonString "xy")
                                 ])
 gridChart :: String -> JSObj
@@ -72,6 +74,14 @@ gridChart = chart "scatter"
 
 lineChart :: String -> JSObj
 lineChart = chart "line"
+
+chartOptions :: JSObj
+chartOptions =   ("plotOptions", J.makeObj [
+                    ("series", J.makeObj [
+                        ("animation", J.showJSON False),
+                        ("shadow", J.showJSON False)
+                    ])
+                ])
 
 chartLegend :: JSObj
 chartLegend =   ("legend", J.makeObj [

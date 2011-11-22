@@ -9,4 +9,15 @@
     var chart;
     $(document).ready(function() {
         chart = new Highcharts.Chart(#{json_data});
+        $('#hide').click(function() {
+            for (x in chart.series) {
+                chart.series[x].hide();
+            }
+        });
+        $('#show').click(function() {
+            for (x in chart.series) {
+                chart.series[x].show();
+            }
+        });
     });
+

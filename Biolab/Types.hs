@@ -16,6 +16,7 @@ module Biolab.Types (
     CorrelationData,
     PlotData,
     ExportedData,
+    wellStr,
 )
 where
 
@@ -35,6 +36,9 @@ data Well = Well {
         wRow :: Char,
         wColumn :: Int
     } deriving (Eq, Show, Read, Ord)
+
+wellStr :: Well -> String
+wellStr w = concat ["(", [wRow w],",",show . wColumn $ w,")"]
 
 data ColonyId = ColonyId {
         cExp :: ExpId,

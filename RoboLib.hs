@@ -26,9 +26,6 @@ import Biolab.Processing (expressionLevelEstimate, expressionLevels, minDoubling
 timedMesData :: ExpData -> MType -> ProcessedData
 timedMesData ed mt = ldMap (G.fromList . map (\x -> (fromIntegral . toSeconds . mTime $ x, mVal x)) . mesByTime mt) (normalizePlate ed)
 
-removeDeadWells :: ExpData -> ExpData
-removeDeadWells = M.filter (not . M.null) . M.map (M.filter liveWell)
-
 removeIllegalPoints = G.filter (isLegal . snd)
 
 timedExpLevels :: MType -> ExpData -> ProcessedData
@@ -57,6 +54,3 @@ intensityGridData ed (xtype,ytype) = grid_points
         m_mes m = G.fromList . sortBy (compare `on` fst) . map (\x -> (fromIntegral . toSeconds . mTime $ x, mVal x)) . filter (\x -> mType x == m)
         exp_level mt ms = expressionLevelEstimate maturationTime (m_mes "OD600" ms) (m_mes mt ms)
         grid_points = ldMap (\x -> (exp_level xtype x,exp_level ytype $ x)) ned
-
-wellStr :: Well -> String
-wellStr w = concat ["(", [wRow w],",",show . wColumn $ w,")"]

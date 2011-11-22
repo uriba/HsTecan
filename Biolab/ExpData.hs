@@ -1,6 +1,7 @@
 module Biolab.ExpData (
     normalizePlate,
     liveWell,
+    removeDeadWells,
     expMesTypes,
     createExpData,
 )
@@ -42,6 +43,9 @@ liveWell ms = odLiveThreshold < (maximum . drop bubble_length . map snd $ od_val
         bubble_length = length . takeWhile (< fromIntegral bubbleTime) . map fst . norm_od_vals $ od_vals
         od_vals = map toPoint . mesByTime "OD600" $ ms
         norm_od_vals xs = map (\(x,y) -> (x-(fst . head $ xs), y)) $ xs
+
+removeDeadWells :: ExpData -> ExpData
+removeDeadWells = M.filter (not . M.null) . M.map (M.filter liveWell)
 
 createExpData :: [Measurement] -> ExpData
 createExpData ms = fromList [ (label, m_for_label label) | label <- labels ms]

@@ -124,7 +124,7 @@ getGridGraph exp plate x y = do
     let div_obj = "container"
     let title = "(" ++ x ++ ", " ++ y ++ ")" ++ " Grid"
     let subtitle = "Experiment: " ++ exp ++ ", Plate: " ++ plate
-    let chart_json = [chartTitle title, chartSubtitle subtitle, chartXaxis x Nothing Nothing, chartYaxis y Nothing Nothing, gridChart div_obj, chartLegend] ++ gridChartSeries igd
+    let chart_json = [chartTitle title, chartSubtitle subtitle, chartXaxis x Nothing Nothing, chartYaxis y Nothing Nothing, gridChart div_obj, chartLegend, chartOptions] ++ gridChartSeries igd
     graphPage title div_obj chart_json
 
 getExpLevelData :: ExpId -> Plate -> MType -> IO ProcessedData
@@ -146,7 +146,7 @@ getExpLevelGraph exp plate t = do
     let page_title = t ++ ", " ++ plate ++ " - " ++ exp
     let title = t ++ " Expression level"
     let subtitle = "Experiment: " ++ exp ++ ", Plate: " ++ plate
-    let chart_json = [chartTitle title, chartSubtitle subtitle, chartXaxis "Time" (Just "datetime") Nothing, chartYaxis t Nothing Nothing, lineChart div_obj, chartLegend] ++ linesChartSeries pd
+    let chart_json = [chartTitle title, chartSubtitle subtitle, chartXaxis "Time" (Just "datetime") Nothing, chartYaxis t Nothing Nothing, lineChart div_obj, chartLegend, chartOptions] ++ linesChartSeries pd
     graphPage title div_obj chart_json
 
 getReadGraphData :: ExpId -> Plate -> MType -> IO ProcessedData
@@ -175,7 +175,7 @@ getTransformedReadGraph f desc exp plate t = do
     let page_title = t ++ ", " ++ plate ++ " - " ++ exp
     let title = t ++ " Measurement data" ++ " - " ++ desc
     let subtitle = "Experiment: " ++ exp ++ ", Plate: " ++ plate
-    let chart_json = [chartTitle title, chartSubtitle subtitle, chartXaxis "Time" (Just "datetime") Nothing, chartYaxis t Nothing Nothing, lineChart div_obj, chartLegend] ++ linesChartSeries mpd
+    let chart_json = [chartTitle title, chartSubtitle subtitle, chartXaxis "Time" (Just "datetime") Nothing, chartYaxis t Nothing Nothing, lineChart div_obj, chartLegend, chartOptions] ++ linesChartSeries mpd
     graphPage title div_obj chart_json
     --let fitdata = M.map (M.map (growthRate t)) mpd
     --let fit = M.map (M.map (map (\(x,y) -> (1/((logBase 2 10) * x),y)) . expFit 7300)) fitdata
