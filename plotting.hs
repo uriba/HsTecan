@@ -1,5 +1,5 @@
 import RoboLib
-import Biolab.Interfaces.MySql (readTable, edExp, loadExpDataDB)
+import Biolab.Interfaces.MySql (readTable, edExp, loadExpDataDB, dbConnectInfo)
 import Biolab.Types (Measurement (..), ExpData, Well(..), ColonyId(..))
 import Biolab.ExpData (normalizePlate)
 import Biolab.Patches (mapSnd)
@@ -134,7 +134,8 @@ displayLoop ed wd h = do
 
 main = do
     [exp_id_p, pl] <- getArgs
-    exp_descs <- readTable "tecan_experiments" $ Nothing
+    db_conf <- dbConnectInfo "RoboSite.conf"
+    exp_descs <- readTable db_conf "tecan_experiments" $ Nothing
     let exp_ids = map edExp exp_descs
     putStrLn $ "searching for: " ++ exp_id_p
     let exp_id = fromJust . L.find (L.isPrefixOf exp_id_p) $ exp_ids
@@ -142,7 +143,7 @@ main = do
     --ed <- loadExpDataDB "2011-09-27 17:07:57" 0
     --ed <- loadExpDataDB "2011-10-05 17:55:38" 2
     --ed <- loadExpDataDB "2011-09-08 17:37:00" 6
-    ed <- loadExpDataDB exp_id . read $ pl
+    ed <- loadExpDataDB "RoboSite.conf" exp_id . read $ pl
     let edn = normalizePlate ed
     if (length . M.elems $ edn) == 0
         then do
