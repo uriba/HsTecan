@@ -22,17 +22,34 @@ import Biolab.Types (Well(..), Measurement(..), ExpData(..), MType, ExpId)
 import Biolab.Measurement (wellFromInts)
 import Biolab.ExpData (createExpData)
 import Data.List (find)
+import Control.Monad.Error (runErrorT)
+import Monad (join)
+import Control.Monad.IO.Class (liftIO)
+import Data.Either.Utils (forceEither)
+import Data.ConfigFile (emptyCP, readfile, get)
 
--- should be exported to a configuration file, and received by functions.
 -- consider adding table names to configuration file as well.
-dbConnectInfo = MySQLConnectInfo {
-    mysqlHost = "132.77.80.238",
-    mysqlUser = "ronm",
-    mysqlPassword = "a1a1a1",
-    mysqlDatabase = "tecan",
-    mysqlPort = 3306,
-    mysqlUnixSocket = "/tmp/mysql.sock"
-}
+dbConnectInfo :: FilePath -> IO MySQLConnectInfo
+dbConnectInfo cf = do
+    rv <- runErrorT $
+        do
+            cp <- join $ liftIO $ readfile emptyCP cf
+            let sect = "MYSQL"
+            host <- get cp sect "host"
+            user <- get cp sect "user"
+            passwd <- get cp sect "password"
+            dbname <- get cp sect "dbname"
+            port <- get cp sect "port"
+            unixsock <- get cp sect "unixsocket"
+            return $ MySQLConnectInfo {
+                mysqlHost = host,
+                mysqlUser = user,
+                mysqlPassword = passwd,
+                mysqlDatabase = dbname,
+                mysqlPort = port,
+                mysqlUnixSocket = unixsock
+            }
+    return $ forceEither rv
 
 maxVal = 70000
 
@@ -89,18 +106,19 @@ instance DbReadable DbMeasurement where
                     val SqlNull = maxVal
                     well = (wellFromInts `on` fromIntegral) row col
 
-readTable :: (DbReadable a) => String -> Maybe SelectCriteria -> IO [a]
-readTable t_name msc = do
-    conn <- connectMySQL dbConnectInfo
+readTable :: (DbReadable a) => MySQLConnectInfo -> String -> Maybe SelectCriteria -> IO [a]
+readTable db_conf t_name msc = do
+    conn <- connectMySQL db_conf
     let where_clause = fromMaybe "" . fmap scWhere $ msc
     let where_params = fromMaybe [] . fmap scVals $ msc
     entries <-  quickQuery' conn ("SELECT * FROM " ++ t_name ++ " " ++ where_clause) where_params
     return . map dbRead $ entries
 
-loadExpDataDB :: ExpId -> Int -> IO ExpData
-loadExpDataDB exp_id p = do
-    readings <- readTable "tecan_readings" (Just $ SelectCriteria "where exp_id = ? AND plate = ?" [toSql exp_id, toSql p])
-    well_labels <- readTable "tecan_labels" (Just $ SelectCriteria "where exp_id = ? AND plate = ?" [toSql exp_id, toSql p])
+loadExpDataDB :: FilePath -> ExpId -> Int -> IO ExpData
+loadExpDataDB cf exp_id p = do
+    db_conf <- dbConnectInfo cf
+    readings <- readTable db_conf "tecan_readings" (Just $ SelectCriteria "where exp_id = ? AND plate = ?" [toSql exp_id, toSql p])
+    well_labels <- readTable db_conf "tecan_labels" (Just $ SelectCriteria "where exp_id = ? AND plate = ?" [toSql exp_id, toSql p])
     return . createExpData . mesFromDB well_labels $ readings
 
 mesFromDB :: [WellDesc] -> [DbMeasurement] -> [Measurement]

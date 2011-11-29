@@ -11,10 +11,10 @@ import Data.List (nub, find, sort)
 import Data.Maybe (isJust, fromJust, fromMaybe)
 import Math.Combinatorics.Graph (combinationsOf)
 import Biolab.Interfaces.MySql (ExpDesc(..), PlateDesc(..), readTable, dbConnectInfo, loadExpDataDB)
-import RoboLib (timedMesData, timedExpLevels, intensityGridData)
+import RoboLib (timedMesData, timedExpLevels, intensityGridData) -- , ranges)
 import Biolab.Interfaces.Csv (processedDataToCSV, correlationDataToCSV)
 import Biolab.Smoothing (bFiltS, smoothAll)
-import Biolab.Types (Measurement(..), ExpId, MType, ldMap, CorrelationData, ProcessedData)
+import Biolab.Types (Measurement(..), ExpId, MType, ldMap, CorrelationData, ProcessedData, LabeledData)
 import Biolab.Patches (mapSnd, mean)
 import qualified Data.Text as T
 import qualified Data.Map as M
@@ -43,10 +43,11 @@ dbToGraphDesc exp_descs plate_descs [SqlByteString exp_id, SqlInt32 p, SqlByteSt
 
 loadExps :: IO [GraphDesc]
 loadExps = do
-    conn <- connectMySQL dbConnectInfo
+    db_conf <- dbConnectInfo "RoboSite.conf"
+    conn <- connectMySQL db_conf
     sql_vals <- quickQuery' conn "SELECT DISTINCT exp_id,plate,reading_label FROM tecan_readings" []
-    exp_descs <- readTable "tecan_experiments" Nothing
-    plate_descs <- readTable "tecan_plates" Nothing
+    exp_descs <- readTable db_conf "tecan_experiments" Nothing
+    plate_descs <- readTable db_conf "tecan_plates" Nothing
     return . map (dbToGraphDesc exp_descs plate_descs) $ sql_vals
 
 data RoboSite = RoboSite
@@ -96,7 +97,7 @@ graphPage title div chart_json = do
 
 getGridGraphData :: ExpId -> Plate -> MType -> MType -> IO CorrelationData
 getGridGraphData exp plate x y = do
-    exp_data <- liftIO $ loadExpDataDB exp (read plate)
+    exp_data <- liftIO $ loadExpDataDB "RoboSite.conf" exp (read plate)
     let sms = smoothAll bFiltS exp_data
     let igd = intensityGridData sms (x,y) 
 {-    putStrLn "avg is:"
@@ -127,9 +128,15 @@ getGridGraph exp plate x y = do
     let chart_json = [chartTitle title, chartSubtitle subtitle, chartXaxis x Nothing Nothing, chartYaxis y Nothing Nothing, gridChart div_obj, chartLegend, chartOptions] ++ gridChartSeries igd
     graphPage title div_obj chart_json
 
+{-getRangesData :: ExpId -> Plate -> MType -> IO (LabeledData (Double,Double))
+getRangesData exp plate t = do
+    exp_data <- liftIO $ loadExpDataDB "RoboSite.conf" exp (read plate)
+    let sms = smoothAll bFiltS exp_data
+    return $ ranges t sms
+-}
 getExpLevelData :: ExpId -> Plate -> MType -> IO ProcessedData
 getExpLevelData exp plate t = do
-    exp_data <- liftIO $ loadExpDataDB exp (read plate)
+    exp_data <- liftIO $ loadExpDataDB "RoboSite.conf" exp (read plate)
     let sms = smoothAll bFiltS exp_data
     return $ timedExpLevels t sms
 
@@ -142,16 +149,17 @@ getExpLevelCSV exp plate t = do
 getExpLevelGraph :: ExpId -> Plate -> MType -> Handler RepHtml
 getExpLevelGraph exp plate t = do
     pd <- liftIO $ getExpLevelData exp plate t
+    -- ranges <- liftIO $ getRangesData exp plate t
     let div_obj = "container"
     let page_title = t ++ ", " ++ plate ++ " - " ++ exp
     let title = t ++ " Expression level"
     let subtitle = "Experiment: " ++ exp ++ ", Plate: " ++ plate
-    let chart_json = [chartTitle title, chartSubtitle subtitle, chartXaxis "Time" (Just "datetime") Nothing, chartYaxis t Nothing Nothing, lineChart div_obj, chartLegend, chartOptions] ++ linesChartSeries pd
+    let chart_json = [chartTitle title, chartSubtitle subtitle, chartXaxis "Time" (Just "datetime") Nothing, chartYaxis t Nothing Nothing, lineChart div_obj, chartLegend, chartOptions] ++ linesChartSeries pd -- markedLinesChartSeries pd ranges
     graphPage title div_obj chart_json
 
 getReadGraphData :: ExpId -> Plate -> MType -> IO ProcessedData
 getReadGraphData exp plate t = do
-    exp_data <- liftIO $ loadExpDataDB exp (read plate)
+    exp_data <- liftIO $ loadExpDataDB "RoboSite.conf" exp (read plate)
     return $ timedMesData exp_data t
 
 getReadGraphCSV :: ExpId -> Plate -> MType -> Handler RepHtml
@@ -183,19 +191,22 @@ getTransformedReadGraph f desc exp plate t = do
 
 updateWellLabel :: ExpId -> Int -> Int -> Int -> String -> IO ()
 updateWellLabel eid p r c l = do
-    conn <- connectMySQL dbConnectInfo
+    db_conf <- dbConnectInfo "RoboSite.conf"
+    conn <- connectMySQL db_conf
     _ <- run conn "INSERT INTO tecan_labels (exp_id,plate,row,col,label) VALUES (?,?,?,?,?) ON DUPLICATE KEY UPDATE label = ?" [toSql eid, toSql p, toSql r, toSql c, toSql l, toSql l]
     return ()
 
 updatePlateLabel :: ExpId -> Int -> String -> IO ()
 updatePlateLabel eid p l = do
-    conn <- connectMySQL dbConnectInfo
+    db_conf <- dbConnectInfo "RoboSite.conf"
+    conn <- connectMySQL db_conf
     _ <- run conn "INSERT INTO tecan_plates (exp_id,plate,description) VALUES (?,?,?) ON DUPLICATE KEY UPDATE description = ?" [toSql eid, toSql p, toSql l, toSql l]
     return ()
 
 updateExpLabel :: ExpId -> String -> IO ()
 updateExpLabel eid l = do
-    conn <- connectMySQL dbConnectInfo
+    db_conf <- dbConnectInfo "RoboSite.conf"
+    conn <- connectMySQL db_conf
     _ <- run conn "INSERT INTO tecan_experiments (exp_id,description) VALUES (?,?) ON DUPLICATE KEY UPDATE description = ?" [toSql eid, toSql l, toSql l]
     return ()
 
