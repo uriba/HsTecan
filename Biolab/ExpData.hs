@@ -34,7 +34,7 @@ expMesTypes = nub . map mType . concat . concatMap M.elems . M.elems
 
 normalizePlate :: ExpData -> ExpData
 normalizePlate ed
-    | Nothing == M.lookup mediaId ed = M.map (M.map (map (\x -> if mType x == "OD600" then x {mVal = max (minValMap ! "OD600") (mVal x - stdMinOd)} else x))) $ ed
+    | Nothing == M.lookup mediaId ed = ed
     | otherwise = subtractConstantBackground ed
 
 liveWell :: [Measurement] -> Bool -- returns whether measurements taken from a given well indicate that it grew.
