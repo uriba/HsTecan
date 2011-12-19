@@ -11,7 +11,7 @@ import Data.List (nub, find, sort)
 import Data.Maybe (isJust, fromJust, fromMaybe)
 import Math.Combinatorics.Graph (combinationsOf)
 import Biolab.Interfaces.MySql (ExpDesc(..), PlateDesc(..), readTable, dbConnectInfo, loadExpDataDB)
-import RoboLib (timedMesData, timedExpLevels, intensityGridData) -- , ranges)
+import RoboLib (timedMesData, timedExpLevels, timedDoublingTimes, intensityGridData)
 import Biolab.Interfaces.Csv (processedDataToCSV, correlationDataToCSV)
 import Biolab.Smoothing (bFiltS, smoothAll)
 import Biolab.Types (Measurement(..), ExpId, MType, ldMap, CorrelationData, ProcessedData, LabeledData)
@@ -100,16 +100,6 @@ getGridGraphData exp plate x y = do
     exp_data <- liftIO $ loadExpDataDB "RoboSite.conf" exp (read plate)
     let sms = smoothAll bFiltS exp_data
     let igd = intensityGridData sms (x,y) 
-{-    putStrLn "avg is:"
-    let as = concatMap M.elems [igd ! "AA",igd ! "AC",igd ! "AD"]
-    let cs = concatMap M.elems [igd ! "CA",igd ! "CC",igd ! "CD"]
-    let ds = concatMap M.elems [igd ! "DA",igd ! "DC",igd ! "DD"]
-    let newmap = [("As", as), ("Cs", cs), ("Ds", ds)]
-    let avgs = map (mapSnd $ (\cds -> (mean . filter ((70<)) . filter ((100>)) . map fst $ cds, mean . map snd $ cds))) newmap
-    mapM (putStrLn . show) $ avgs
-    putStrLn "median is:"
-    let medians = map (mapSnd (\cds -> drop (length cds `div` 2) . sort . map fst $ cds)) newmap
-    mapM (putStrLn . show) $ medians -}
     return $ igd
 
 getGridGraphCSV :: ExpId -> Plate -> MType -> MType -> Handler RepHtml
@@ -128,12 +118,21 @@ getGridGraph exp plate x y = do
     let chart_json = [chartTitle title, chartSubtitle subtitle, chartXaxis x Nothing Nothing, chartYaxis y Nothing Nothing, gridChart div_obj, chartLegend, chartOptions] ++ gridChartSeries igd
     graphPage title div_obj chart_json
 
-{-getRangesData :: ExpId -> Plate -> MType -> IO (LabeledData (Double,Double))
-getRangesData exp plate t = do
+getDoublingTimes :: ExpId -> Plate -> MType -> IO ProcessedData
+getDoublingTimes exp plate t = do
     exp_data <- liftIO $ loadExpDataDB "RoboSite.conf" exp (read plate)
-    let sms = smoothAll bFiltS exp_data
-    return $ ranges t sms
--}
+    return $ timedDoublingTimes t exp_data
+
+getDoublingTimesGraph :: ExpId -> Plate -> MType -> Handler RepHtml
+getDoublingTimesGraph exp plate t = do
+    pd <- liftIO $ getDoublingTimes exp plate t
+    let div_obj = "container"
+    let page_title = t ++ ", " ++ plate ++ " - " ++ exp
+    let title = t ++ " Doubling times"
+    let subtitle = "Experiment: " ++ exp ++ ", Plate: " ++ plate
+    let chart_json = [chartTitle title, chartSubtitle subtitle, chartXaxis "Time" (Just "datetime") Nothing, chartYaxis t Nothing Nothing, lineChart div_obj, chartLegend, chartOptions] ++ linesChartSeries pd
+    graphPage title div_obj chart_json
+
 getExpLevelData :: ExpId -> Plate -> MType -> IO ProcessedData
 getExpLevelData exp plate t = do
     exp_data <- liftIO $ loadExpDataDB "RoboSite.conf" exp (read plate)
@@ -149,12 +148,11 @@ getExpLevelCSV exp plate t = do
 getExpLevelGraph :: ExpId -> Plate -> MType -> Handler RepHtml
 getExpLevelGraph exp plate t = do
     pd <- liftIO $ getExpLevelData exp plate t
-    -- ranges <- liftIO $ getRangesData exp plate t
     let div_obj = "container"
     let page_title = t ++ ", " ++ plate ++ " - " ++ exp
     let title = t ++ " Expression level"
     let subtitle = "Experiment: " ++ exp ++ ", Plate: " ++ plate
-    let chart_json = [chartTitle title, chartSubtitle subtitle, chartXaxis "Time" (Just "datetime") Nothing, chartYaxis t Nothing Nothing, lineChart div_obj, chartLegend, chartOptions] ++ linesChartSeries pd -- markedLinesChartSeries pd ranges
+    let chart_json = [chartTitle title, chartSubtitle subtitle, chartXaxis "Time" (Just "datetime") Nothing, chartYaxis t Nothing Nothing, lineChart div_obj, chartLegend, chartOptions] ++ linesChartSeries pd
     graphPage title div_obj chart_json
 
 getReadGraphData :: ExpId -> Plate -> MType -> IO ProcessedData
@@ -185,9 +183,6 @@ getTransformedReadGraph f desc exp plate t = do
     let subtitle = "Experiment: " ++ exp ++ ", Plate: " ++ plate
     let chart_json = [chartTitle title, chartSubtitle subtitle, chartXaxis "Time" (Just "datetime") Nothing, chartYaxis t Nothing Nothing, lineChart div_obj, chartLegend, chartOptions] ++ linesChartSeries mpd
     graphPage title div_obj chart_json
-    --let fitdata = M.map (M.map (growthRate t)) mpd
-    --let fit = M.map (M.map (map (\(x,y) -> (1/((logBase 2 10) * x),y)) . expFit 7300)) fitdata
-    --liftIO $ putStrLn . show $ fit
 
 updateWellLabel :: ExpId -> Int -> Int -> Int -> String -> IO ()
 updateWellLabel eid p r c l = do

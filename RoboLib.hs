@@ -1,6 +1,7 @@
 module RoboLib (
     timedMesData,
     timedExpLevels,
+    timedDoublingTimes,
     intensityGridData,
     wellStr,
     AxesTrans,
@@ -28,10 +29,13 @@ timedMesData ed mt = ldMap (G.fromList . map (\x -> (fromIntegral . toSeconds . 
 
 removeIllegalPoints = G.filter (isLegal . snd)
 
-timedExpLevels :: MType -> ExpData -> ProcessedData
-timedExpLevels "OD600" ed = ldMap (\x -> removeIllegalPoints . doublingTimeMinutes . od_mes $ x) . normalizePlate  $ ed
+timedDoublingTimes :: MType -> ExpData -> ProcessedData
+timedDoublingTimes m ed = ldMap (\x -> removeIllegalPoints . doublingTimeMinutes . od_mes $ x) . normalizePlate  $ ed
     where
-        od_mes = G.fromList . map toPoint . mesByTime "OD600"
+        od_mes = G.fromList . map toPoint . mesByTime m
+
+timedExpLevels :: MType -> ExpData -> ProcessedData
+timedExpLevels "OD600" _ = error "no expression level data for od"
 timedExpLevels m ed = ldMap (\x -> removeIllegalPoints . expressionLevels maturationTime (od_mes x) $ (fl_mes m x)) . normalizePlate $ ed
     where
         fl_mes m = G.fromList . map toPoint . mesByTime m

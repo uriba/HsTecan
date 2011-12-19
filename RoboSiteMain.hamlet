@@ -38,6 +38,13 @@
                                         <a href=@{ReadGraphCSV (fst exp) (fst plate) mtype}>
                                             [Get data]
                         <li>
+                            Doubling times
+                            <ul>
+                                $forall mtype <- expLevels (fst exp) (fst plate) disp_data
+                                    <li>
+                                        <a href=@{DoublingTimesGraph (fst exp) (fst plate) mtype}>
+                                            #{mtype}
+                        <li>
                             Expression levels
                             <ul>
                                 $forall mtype <- expLevels (fst exp) (fst plate) disp_data

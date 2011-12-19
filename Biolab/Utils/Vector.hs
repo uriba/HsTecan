@@ -5,6 +5,7 @@ module Biolab.Utils.Vector (
     Series,
     expFitWindow,
     FitData(..),
+    fitData,
     range,
     ranges,
     intersectingRanges,

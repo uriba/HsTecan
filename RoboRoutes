@@ -8,6 +8,7 @@
 /RoboSite/graph/#ExpId/#Plate/#GraphType/LogRead LogReadGraph GET
 /RoboSite/data/#ExpId/#Plate/#GraphType/Read ReadGraphCSV GET
 /RoboSite/graph/#ExpId/#Plate/#GraphType/Exp ExpLevelGraph GET
+/RoboSite/graph/#ExpId/#Plate/#GraphType/Doubling DoublingTimesGraph GET
 /RoboSite/data/#ExpId/#Plate/#GraphType/Exp ExpLevelCSV GET
 /RoboSite/graph/#ExpId/#Plate/#GraphType/#GraphType/Exp GridGraph GET
 /RoboSite/data/#ExpId/#Plate/#GraphType/#GraphType/Exp GridGraphCSV GET
