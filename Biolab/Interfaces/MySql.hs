@@ -47,7 +47,8 @@ dbConnectInfo cf = do
                 mysqlPassword = passwd,
                 mysqlDatabase = dbname,
                 mysqlPort = port,
-                mysqlUnixSocket = unixsock
+                mysqlUnixSocket = unixsock,
+                mysqlGroup = Nothing
             }
     return $ forceEither rv
 

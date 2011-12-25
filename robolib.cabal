@@ -9,9 +9,8 @@ Cabal-Version:	>=1.2
 Library
     Build-Depends:    base >= 3 && < 5, gnuplot >=0.4.2 && < 4.3, parsec >= 3.1 && < 3.2,
                       MissingH >= 1.1 && < 1.2, statistics < 0.9, datetime >= 0.2 && < 0.3,
-                      haskell98 >= 1.0 && < 1.2, vector >= 0.9 && < 0.10, containers >= 0.3 && <0.4,
-                      ListLike >= 3.1.2 && < 3.2, listlike-instances >= 0.2 && < 0.3,
-                      statistics-linreg >= 0.2.1 && < 0.3, cprng-aes < 0.2.2, ConfigFile >= 1.1.1 && < 1.2,
+                      haskell98 >= 1.0 && < 1.2, vector >= 0.9 && < 0.10, containers >= 0.3 && <0.5,
+                      statistics-linreg >= 0.2.1 && < 0.3, cprng-aes < 0.2.4, ConfigFile >= 1.1.1 && < 1.2,
                       transformers >= 0.2.2.0 && < 0.2.3, mtl >= 2.0.1 && < 2.1
     Exposed-modules:  RoboLib, GnuPlotUtils, Biolab.Utils.Vector, Biolab.Processing, Biolab.Constants, Biolab.Types, Biolab.Interfaces.MySql, Biolab.Interfaces.Csv
 
@@ -19,25 +18,25 @@ Executable  PlotExpData
     Main-is:	      PlotExpData.hs
     Build-Depends:    base >= 3 && < 5, gnuplot >=0.4.2 && < 4.3, parsec >= 3.1 && < 3.2,
                       MissingH >= 1.1 && < 1.2, statistics < 0.9, datetime >= 0.2 && < 0.3,
-                      haskell98 >= 1.0 && < 1.2, vector >= 0.9 && < 0.10, containers >= 0.3 && <0.4
+                      haskell98 >= 1.0 && < 1.2, vector >= 0.9 && < 0.10, containers >= 0.3 && <0.5
 
 Executable  plotting
     Main-is:	      plotting.hs
     Build-Depends:    base >= 3 && < 5, gnuplot >=0.4.2 && < 4.3, parsec >= 3.1 && < 3.2,
                       MissingH >= 1.1 && < 1.2, statistics < 0.9, datetime >= 0.2 && < 0.3,
-                      haskell98 >= 1.0 && < 1.2, vector >= 0.9 && < 0.10, containers >= 0.3 && <0.4,
+                      haskell98 >= 1.0 && < 1.2, vector >= 0.9 && < 0.10, containers >= 0.3 && <0.5,
                       utf8-string >= 0.3.6 && < 0.4, bytestring >= 0.9 && < 0.10,
                       text >= 0.11 && < 0.12, HDBC >= 2.2 && < 2.3, HDBC-mysql >= 0.6 && < 0.7,
-                      HaskellForMaths >= 0.3 && < 0.4, filepath >= 1.1 && < 1.2, plot >= 0.1.3 && < 0.2,
+                      HaskellForMaths >= 0.3 && < 0.4, filepath >= 1.2 && < 1.3, plot >= 0.1.3 && < 0.2,
                       plot-gtk >= 0.1.0.6 && < 0.2, hmatrix >= 0.12 && < 0.13,
                       pango <= 0.12.0, cairo <= 0.12.0, gio <= 0.12.0, glib <= 0.12.0, gtk <= 0.12.0
 Executable  RoboSite
     Main-is:	      RoboSite.hs
     Build-Depends:    base >= 3 && < 5, gnuplot >=0.4.2 && < 4.3, parsec >= 3.1 && < 3.2,
                       MissingH >= 1.1 && < 1.2, statistics < 0.9, datetime >= 0.2 && < 0.3,
-                      haskell98 >= 1.0 && < 1.2, vector >= 0.9 && < 0.10, containers >= 0.3 && <0.4,
+                      haskell98 >= 1.0 && < 1.2, vector >= 0.9 && < 0.10, containers >= 0.3 && <0.5,
                       json >= 0.4.4 && < 0.5, utf8-string >= 0.3.6 && < 0.4, bytestring >= 0.9 && < 0.10,
                       text >= 0.11 && < 0.12, HDBC >= 2.2 && < 2.3, HDBC-mysql >= 0.6 && < 0.7,
-                      HaskellForMaths >= 0.3 && < 0.4, filepath >= 1.1 && < 1.2, yesod-form >= 0.3.2 && < 0.3.3,
+                      HaskellForMaths >= 0.3 && < 0.4, filepath >= 1.2 && < 1.3, yesod-form >= 0.3.4 && < 0.4,
                       yesod >= 0.9 && < 0.10, shakespeare-js >= 0.10 && < 0.11, hamlet >= 0.10 && < 0.11,
-                      shakespeare-css >= 0.10 && < 0.11
+                      shakespeare-css >= 0.10 && < 0.11, yesod-auth >= 0.7.8

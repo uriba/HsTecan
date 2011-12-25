@@ -16,10 +16,9 @@ import Biolab.Constants
 import Data.List (sortBy, nub)
 import Data.Function (on)
 import Data.DateTime (toSeconds)
-import qualified Data.ListLike as LL
 
-filterBy :: (Eq b, LL.ListLike full a) => (a -> b) -> b -> full -> full
-filterBy f v = LL.filter ((==) v . f)
+filterBy :: (Eq b) => (a -> b) -> b -> [a] -> [a]
+filterBy f v = filter ((==) v . f)
 
 filterByWell :: Well -> [Measurement] -> [Measurement]
 filterByWell = filterBy mWell

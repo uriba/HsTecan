@@ -62,14 +62,14 @@ window_size = 5
 type ExpressionLevelEstimateAtConstOd = Double -> Seconds -> Series -> Series -> Double
 
 derivativeEstimation :: ExpressionLevelEstimateAtConstOd
-derivativeEstimation target_od mat_time ods fs = logBase 2 $ 0.1 + derivate real_time_fs mid_od_time / target_od
+derivativeEstimation target_od mat_time ods fs = logBase 2 $ 0.1 + (derivate real_time_fs mid_od_time) / target_od
     where
         real_time_fs = realTime mat_time fs
         mid_od_time = fst . fromMaybe default_point . find ((target_od <) . snd) . G.toList $ ods
         default_point = G.head . G.drop 3 $ ods
 
 integralEstimation :: ExpressionLevelEstimateAtConstOd
-integralEstimation target_od mat_time ods fs = logBase 2 $ 0.1 + (delta real_time_fs mid_od_time) / integrate ods mid_od_time
+integralEstimation target_od mat_time ods fs = logBase 2 $ 0.1 + (abs $ delta real_time_fs mid_od_time) / integrate ods mid_od_time
     where
         real_time_fs = realTime mat_time fs
         mid_od_time = fst . fromMaybe default_point . find ((target_od <) . snd) . G.toList $ ods
@@ -88,7 +88,6 @@ expressionLevelEstimate mat_time ods fs =  mean . map snd . filter (isLegal . sn
         range = findRange (floor exponentialPhaseGrowthRateWindow) ods real_time_fs
         real_time_fs = realTime mat_time fs
         fit_data = map snd . subRange range . stdFits
-
 
 -- can be plugged into expressionLevels for interrogation.
 expressionLevelByOD :: ExpressionLevelEstimateAtConstOd -> Seconds -> Series -> Series -> Series

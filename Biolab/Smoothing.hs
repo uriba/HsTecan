@@ -10,8 +10,6 @@ import Data.Function (on)
 import Data.Maybe (mapMaybe)
 import Biolab.Patches (mean)
 import qualified Data.Map as M
-import qualified Data.ListLike as LL
-import Data.ListLike.Vector.Unboxed
 import qualified Statistics.Sample as S
 import qualified Data.Vector.Generic as G
 import qualified Data.Vector as V

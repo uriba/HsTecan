@@ -1,4 +1,6 @@
 /RoboSite HomeR GET
+/RoboSite/auth AuthR Auth getAuth
+/RoboSite/update UpdateR
 /RoboSite/update/#ExpId/ UpdateExpForm GET
 /RoboSite/update/#ExpId/#Plate/ UpdatePlateForm GET
 /RoboSite/upload/#ExpId/#Plate/ UploadPlateDesc GET

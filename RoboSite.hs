@@ -4,6 +4,8 @@ import Text.Hamlet
 import Text.Julius
 import Yesod.Form.Fields (fileAFormReq)
 import Yesod.Form.Jquery
+import Yesod.Auth
+import Yesod.Auth.BrowserId
 import Database.HDBC.MySQL
 import Database.HDBC
 import Data.ByteString.UTF8 (toString)
@@ -28,6 +30,8 @@ import HighChartsJson
 import Text.ParserCombinators.Parsec (parse)
 import Data.CSV (csvFile)
 import Data.Either.Utils
+import Data.Text (Text)
+import Data.Monoid
 
 data GraphDesc = GraphDesc {gdExp :: ExpId, gdPlate :: Plate, gdMesType :: MType, gdExpDesc :: Maybe String, gdPlateDesc :: Maybe String} deriving (Show)
 
@@ -58,11 +62,40 @@ mkYesod "RoboSite" $(parseRoutesFile "RoboRoutes")
 
 instance Yesod RoboSite where
     approot _ = ""
+    authRoute _ = Just $ AuthR LoginR
+    isAuthorized _ True = isMember
+    isAuthorized UpdateR _ = isMember
+    isAuthorized _ _ = return Authorized
 
 instance RenderMessage RoboSite FormMessage where
     renderMessage _ _ = defaultFormMessage
 
 instance YesodJquery RoboSite
+
+instance YesodAuth RoboSite where
+    type AuthId RoboSite = Text
+    getAuthId = return . Just . credsIdent
+    loginDest _ = HomeR
+    logoutDest _ = HomeR
+    authPlugins =
+        [   authBrowserId'
+        --,   authGoogleEmail
+        ]
+
+authorized = ["mail@gmail.com"]
+
+isMember = do
+    mu <- maybeAuthId
+    return $ case mu of
+        Nothing -> AuthenticationRequired
+        Just x -> if x `elem` authorized
+                    then Authorized
+                    else Unauthorized $ "User " `mappend` x `mappend` " not allowed to upload updates"
+
+handleUpdateR :: Handler RepHtml
+handleUpdateR = defaultLayout [whamlet|
+<p> authenticated
+|]
 
 -- update me
 uploadPlateDesc = renderTable $ pure (,) <*> fileAFormReq "CSV file to upload:"
