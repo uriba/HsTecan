@@ -29,9 +29,6 @@ minDoublingTimeMinutes :: Series -> Double
 minDoublingTimeMinutes s
     | G.null (doublingTimeMinutes s) = 0
     | otherwise = minimum . drop 2 . map snd . G.toList . doublingTimeMinutes $ s
--- Alternatives are:
--- take the maximal growth rate and use it's calculated expression level.
--- pick a window with highest growth rate of OD/Fl and calculate the expression level on these windows.
 
 realTime :: Seconds -> Series -> Series
 realTime s = vxMap (-(fromIntegral s) +)
@@ -62,10 +59,10 @@ window_size = 5
 type ExpressionLevelEstimateAtConstOd = Double -> Seconds -> Series -> Series -> Double
 
 derivativeEstimation :: ExpressionLevelEstimateAtConstOd
-derivativeEstimation target_od mat_time ods fs = logBase 2 $ 0.1 + (derivate real_time_fs mid_od_time) / target_od
+derivativeEstimation target_od mat_time ods fs = logBase 2 $ 0.1 + (derivate real_time_fs mid_od_time) / od_val
     where
         real_time_fs = realTime mat_time fs
-        mid_od_time = fst . fromMaybe default_point . find ((target_od <) . snd) . G.toList $ ods
+        (mid_od_time,od_val) = fromMaybe default_point . find ((target_od <) . snd) . G.toList $ ods
         default_point = G.head . G.drop 3 $ ods
 
 integralEstimation :: ExpressionLevelEstimateAtConstOd
@@ -82,38 +79,15 @@ meanEstimation f mat_time ods fs = mean . map (\x -> f x mat_time ods fs) $ od_v
         od_vals = take 5 . map snd . fromMaybe [] . find ((mid_od <) . snd . (!! 2)) . tails . G.toList $ ods
 
 expressionLevelEstimate :: Seconds -> Series -> Series -> Double
-expressionLevelEstimate mat_time ods fs =  mean . map snd . filter (isLegal . snd) . zipWith expressionLevel (fit_data ods) $ (fit_data real_time_fs)
-    where
-        -- this is probably a bug - I'm taking the range where the maximal values are and not the maximal growth rates...
-        range = findRange (floor exponentialPhaseGrowthRateWindow) ods real_time_fs
-        real_time_fs = realTime mat_time fs
-        fit_data = map snd . subRange range . stdFits
+expressionLevelEstimate = meanEstimation integralEstimation
 
 -- can be plugged into expressionLevels for interrogation.
 expressionLevelByOD :: ExpressionLevelEstimateAtConstOd -> Seconds -> Series -> Series -> Series
-expressionLevelByOD f mat_time ods fs = G.fromList . catMaybes . map maybeExpLevelEst $ od_vals
+expressionLevelByOD f mat_time ods fs = G.fromList . map (\(t,od) -> (od, f od mat_time real_ods fs)) . G.toList $ real_ods
     where
-        od_vals = map (/1000) [20..200]
-        maybeExpLevelEst od = if isJust . G.find ((od <) . snd) $ ods
-                                then Just (od,f od mat_time ods fs)
-                                else Nothing
+        real_ods = G.fromList . dropWhile ((min_od <) . snd) . takeWhile ((max_od >) . snd) . G.toList $ ods
+        min_od = minimum . map snd . G.toList $ ods
+        max_od = maximum . map snd . G.toList $ ods
 
 expressionLevels :: Seconds -> Series -> Series -> Series
-expressionLevels mat_time ods fs = G.fromList $ zipWith timed_el (stdFits ods) (stdFits real_time_fs)
-    where
-        real_time_fs = realTime mat_time fs
-        timed_el (t1,odf) (t2,flfd) = (t1,snd $ expressionLevel odf flfd) -- log/verify times?
-
-stdFits = expFitWindow exponentialPhaseGrowthRateWindow
-
-expressionLevel :: FitData -> FitData -> (Double,Double)
-expressionLevel od fl = ((fdAlpha od - fdAlpha fl) ** 2,fdAlpha od + fdBeta fl - fdBeta od)
-
--- return a time range of length r containing the maximal measurements of the two series.
-findRange :: Seconds -> Series -> Series -> (Double,Double)
-findRange r s1 s2 = fromJust . find ((rng <=) . range) . map (overlapping_range s1 s2) $ thresholds s1 s2
-    where
-        interval s = floor $ (fst . G.head . G.tail $ s) - (fst . G.head $ s)
-        thresholds s1 s2 = genericDrop (2 * r `div` interval s1) . reverse . sort . filter isLegal . map snd $ (G.toList s1 ++ G.toList s2)
-        overlapping_range s1 s2 t = maximumBy (compare `on` range) $ (0,0) : intersectingRanges (ranges (> t) s1) (ranges (> t) s2)
-        rng = fromIntegral r
+expressionLevels = expressionLevelByOD integralEstimation

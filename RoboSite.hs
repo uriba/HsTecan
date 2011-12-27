@@ -2,10 +2,12 @@
 import Yesod
 import Text.Hamlet
 import Text.Julius
+import Text.Cassius
 import Yesod.Form.Fields (fileAFormReq)
 import Yesod.Form.Jquery
 import Yesod.Auth
 import Yesod.Auth.BrowserId
+import Yesod.Auth.GoogleEmail
 import Database.HDBC.MySQL
 import Database.HDBC
 import Data.ByteString.UTF8 (toString)
@@ -17,7 +19,7 @@ import RoboLib (timedMesData, timedExpLevels, timedDoublingTimes, intensityGridD
 import Biolab.Interfaces.Csv (processedDataToCSV, correlationDataToCSV)
 import Biolab.Smoothing (bFiltS, smoothAll)
 import Biolab.Types (Measurement(..), ExpId, MType, ldMap, CorrelationData, ProcessedData, LabeledData)
-import Biolab.Patches (mapSnd, mean)
+import Biolab.Patches (mapSnd, mapFst, mean)
 import qualified Data.Text as T
 import qualified Data.Map as M
 import Data.Map ((!))
@@ -61,10 +63,9 @@ type GraphType = String
 mkYesod "RoboSite" $(parseRoutesFile "RoboRoutes")
 
 instance Yesod RoboSite where
-    approot _ = ""
+    approot _ = "http://localhost/"
     authRoute _ = Just $ AuthR LoginR
     isAuthorized _ True = isMember
-    isAuthorized UpdateR _ = isMember
     isAuthorized _ _ = return Authorized
 
 instance RenderMessage RoboSite FormMessage where
@@ -78,24 +79,27 @@ instance YesodAuth RoboSite where
     loginDest _ = HomeR
     logoutDest _ = HomeR
     authPlugins =
-        [   authBrowserId'
-        --,   authGoogleEmail
-        ]
+        [ authGoogleEmail ]
 
-authorized = ["mail@gmail.com"]
+authorized = [
+    "uri.barenholz@gmail.com",
+    "uri.b.mail@gmail.com",
+    "niv.anto@gmail.com",
+    "prabula@gmail.com",
+    "flamholz@gmail.com",
+    "liorz055@gmail.com",
+    "ron.milo.weizmann@gmail.com",
+    "elad.noor@gmail.com",
+    "arren.be@gmail.com"]
 
 isMember = do
     mu <- maybeAuthId
+    liftIO $ putStrLn $ "is memeber called with uid:" ++ show mu
     return $ case mu of
         Nothing -> AuthenticationRequired
         Just x -> if x `elem` authorized
                     then Authorized
                     else Unauthorized $ "User " `mappend` x `mappend` " not allowed to upload updates"
-
-handleUpdateR :: Handler RepHtml
-handleUpdateR = defaultLayout [whamlet|
-<p> authenticated
-|]
 
 -- update me
 uploadPlateDesc = renderTable $ pure (,) <*> fileAFormReq "CSV file to upload:"
@@ -159,11 +163,12 @@ getDoublingTimes exp plate t = do
 getDoublingTimesGraph :: ExpId -> Plate -> MType -> Handler RepHtml
 getDoublingTimesGraph exp plate t = do
     pd <- liftIO $ getDoublingTimes exp plate t
+    let mpd = convertTimeToMS pd
     let div_obj = "container"
     let page_title = t ++ ", " ++ plate ++ " - " ++ exp
     let title = t ++ " Doubling times"
     let subtitle = "Experiment: " ++ exp ++ ", Plate: " ++ plate
-    let chart_json = [chartTitle title, chartSubtitle subtitle, chartXaxis "Time" (Just "datetime") Nothing, chartYaxis t Nothing Nothing, lineChart div_obj, chartLegend, chartOptions] ++ linesChartSeries pd
+    let chart_json = [chartTitle title, chartSubtitle subtitle, chartXaxis "Time" (Just "datetime") Nothing, chartYaxis t Nothing Nothing, lineChart div_obj, chartLegend, chartOptions] ++ linesChartSeries mpd
     graphPage title div_obj chart_json
 
 getExpLevelData :: ExpId -> Plate -> MType -> IO ProcessedData
@@ -185,7 +190,7 @@ getExpLevelGraph exp plate t = do
     let page_title = t ++ ", " ++ plate ++ " - " ++ exp
     let title = t ++ " Expression level"
     let subtitle = "Experiment: " ++ exp ++ ", Plate: " ++ plate
-    let chart_json = [chartTitle title, chartSubtitle subtitle, chartXaxis "Time" (Just "datetime") Nothing, chartYaxis t Nothing Nothing, lineChart div_obj, chartLegend, chartOptions] ++ linesChartSeries pd
+    let chart_json = [chartTitle title, chartSubtitle subtitle, chartXaxis "OD" Nothing Nothing, chartYaxis t Nothing Nothing, lineChart div_obj, chartLegend, chartOptions] ++ linesChartSeries pd
     graphPage title div_obj chart_json
 
 getReadGraphData :: ExpId -> Plate -> MType -> IO ProcessedData
@@ -205,11 +210,14 @@ getLogReadGraph = getTransformedReadGraph (logBase 2) "Log scale"
 getReadGraph :: ExpId -> Plate -> MType -> Handler RepHtml
 getReadGraph = getTransformedReadGraph id ""
 
+convertTimeToMS :: ProcessedData -> ProcessedData
+convertTimeToMS = ldMap (G.map (mapFst (*1000)))
+    
 getTransformedReadGraph :: (Double -> Double) -> String -> ExpId -> Plate -> MType -> Handler RepHtml
 getTransformedReadGraph f desc exp plate t = do
     pdt <- liftIO $ getReadGraphData exp plate t
     let pd = M.delete "NULL" pdt
-    let mpd = ldMap (G.map (mapSnd f)) pd
+    let mpd = convertTimeToMS . ldMap (G.map (mapSnd f)) $ pd
     let div_obj = "container"
     let page_title = t ++ ", " ++ plate ++ " - " ++ exp
     let title = t ++ " Measurement data" ++ " - " ++ desc
@@ -240,7 +248,7 @@ updateExpLabel eid l = do
 
 data Params = Params {label :: T.Text}
 
-labelUpdateForm :: Html -> Form RoboSite RoboSite (FormResult Params,Widget)
+labelUpdateForm :: Html -> MForm RoboSite RoboSite (FormResult Params,Widget)
 labelUpdateForm = renderDivs $ Params <$> areq textField "Label" Nothing
 
 getUpdatePlateForm :: ExpId -> Plate -> Handler RepHtml
@@ -249,10 +257,10 @@ getUpdatePlateForm eid p = updateForm eid (Just p)
 getUpdateExpForm :: ExpId -> Handler RepHtml
 getUpdateExpForm eid = updateForm eid Nothing
 
-getUpdateLabel :: ExpId -> Plate -> Handler RepHtml
-getUpdateLabel eid p = do
+postUpdateLabel :: ExpId -> Plate -> Handler RepHtml
+postUpdateLabel eid p = do
     let m_label = Just . Params . T.pack $ "default"
-    ((res, widget), enctype) <- runFormGet labelUpdateForm
+    ((res, widget), enctype) <- runFormPost labelUpdateForm
     output <-
         case res of
             FormMissing -> return . T.pack $ "Missing data!"
@@ -260,15 +268,18 @@ getUpdateLabel eid p = do
             FormSuccess (Params label) -> do
                 if p == "-1"
                     then
-                        liftIO . updateExpLabel eid . T.unpack $ label
+                        do
+                            liftIO . updateExpLabel eid . T.unpack $ label
+                            return "Label updated"
                     else
-                        liftIO . updatePlateLabel eid (read p) . T.unpack $ label
-                return . T.pack $ "Label updated"
-    getHomeR
+                        do
+                            liftIO . updatePlateLabel eid (read p) . T.unpack $ label
+                            return "Label updated"
+    redirect RedirectTemporary HomeR
 
 updateForm :: ExpId -> Maybe Plate -> Handler RepHtml
 updateForm eid mp = do
-    ((_, widget), enctype) <- generateFormGet $ labelUpdateForm
+    ((_, widget), enctype) <- generateFormPost $ labelUpdateForm
     defaultLayout $(whamletFile "UpdateLabelForm.whamlet")
 
 plates :: ExpId -> [GraphDesc] -> [(Plate,Maybe String)]
@@ -285,16 +296,20 @@ grids e p gd = zip (map head all_pairs) (map last all_pairs)
     where
         all_pairs = map (\x -> if head x == "OD600" then [last x, head x] else x) . combinationsOf 2 . expLevels e p $ gd
 
+postHomeR :: Handler ()
+postHomeR = redirect RedirectTemporary HomeR
+
 getHomeR :: Handler RepHtml
 getHomeR = do
     disp_data <- liftIO loadExps
+    maid <- maybeAuthId
     let exp_descs =  reverse . sort . nub $ [ (gdExp x, gdExpDesc x) | x <- disp_data]
     let exp_ids = nub . map gdExp $ disp_data
     defaultLayout $ do
         setTitle "Robosite"
         addHamlet $(hamletFile "RoboSiteMain.hamlet")
         addJulius $(juliusFile "RoboSiteMain.julius")
-        --addCassius $(cassiusFile "RoboSiteMain.cassius")
+        addCassius $(cassiusFile "RoboSiteMain.cassius")
 
 main = do
     warpDebug 3000 RoboSite

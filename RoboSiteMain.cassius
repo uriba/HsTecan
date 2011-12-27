@@ -1,0 +1,30 @@
+html, body
+    height:100%
+    margin: 0
+    padding: 0
+body
+    font-family: Verdana, helvetica, arial, sans-serif
+    background: #fff
+    color: #333
+
+h1, h2
+    font-family: verdana, arial
+    padding: 10px
+    margin: 0
+h1 
+    text-align: center
+p.login
+    text-align: right
+#banner
+    padding: 15px
+    background-color: ##06b
+    color: white
+    font-size: large
+    border-bottom: 1px solid #ccc
+    text-align: center
+#banner a
+    color: white
+#main
+    padding: 1em
+a img
+    border: none

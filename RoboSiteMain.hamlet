@@ -1,4 +1,13 @@
-<h1> Welcome to the Robosite
+<p class="login">
+    $maybe user <- maid
+        #{show user} #
+        <a href=@{AuthR LogoutR}>
+            Logout
+    $nothing
+        <a href=@{AuthR LoginR}>
+            Login
+<h1>
+        Welcome to the Robosite
 <h2> experiments list:
 <ul id="red" class="treeview-red">
     $forall exp <- exp_descs

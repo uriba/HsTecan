@@ -143,7 +143,7 @@ lineSeries s (i,l) (cid,vals) = J.makeObj [
     ("data", J.showJSONs jsvals)]
     where
         name = l ++ " - " ++ (wellStr . cWell $ cid)
-        jsvals = map (\(x,y) -> J.showJSONs [x * 1000,y]) . G.toList $ vals
+        jsvals = map (\(x,y) -> J.showJSONs [x,y]) . G.toList $ vals
 
 colorsArray :: (Integral a) => a -> [J.JSValue]
 colorsArray x = map (rgbColor . (\c -> (fromIntegral c) / fromIntegral x)) [1..x]
