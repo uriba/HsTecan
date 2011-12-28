@@ -1,4 +1,4 @@
-/RoboSite HomeR GET POST
+/RoboSite HomeR GET
 /RoboSite/auth AuthR Auth getAuth
 /RoboSite/update/#ExpId/ UpdateExpForm GET
 /RoboSite/update/#ExpId/#Plate/ UpdatePlateForm GET

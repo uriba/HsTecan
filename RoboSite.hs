@@ -31,9 +31,12 @@ import Control.Applicative ((<$>), pure, (<*>))
 import HighChartsJson
 import Text.ParserCombinators.Parsec (parse)
 import Data.CSV (csvFile)
-import Data.Either.Utils
+import Data.Either.Utils (forceEither, fromRight)
 import Data.Text (Text)
 import Data.Monoid
+import Data.ConfigFile (emptyCP, readfile, options)
+import Control.Monad.Error (runErrorT)
+import Monad (join)
 
 data GraphDesc = GraphDesc {gdExp :: ExpId, gdPlate :: Plate, gdMesType :: MType, gdExpDesc :: Maybe String, gdPlateDesc :: Maybe String} deriving (Show)
 
@@ -66,6 +69,9 @@ instance Yesod RoboSite where
     approot _ = "http://localhost/"
     authRoute _ = Just $ AuthR LoginR
     isAuthorized _ True = isMember
+    isAuthorized (UpdateExpForm _) _ = isMember
+    isAuthorized (UpdatePlateForm _ _) _ = isMember
+    isAuthorized (UploadPlateDesc _ _) _ = isMember
     isAuthorized _ _ = return Authorized
 
 instance RenderMessage RoboSite FormMessage where
@@ -81,23 +87,22 @@ instance YesodAuth RoboSite where
     authPlugins =
         [ authGoogleEmail ]
 
-authorized = [
-    "uri.barenholz@gmail.com",
-    "uri.b.mail@gmail.com",
-    "niv.anto@gmail.com",
-    "prabula@gmail.com",
-    "flamholz@gmail.com",
-    "liorz055@gmail.com",
-    "ron.milo.weizmann@gmail.com",
-    "elad.noor@gmail.com",
-    "arren.be@gmail.com"]
+getUsers :: FilePath -> IO [String]
+getUsers cf = do
+    rv <- runErrorT $
+        do
+            cp <- join $ liftIO $ readfile emptyCP cf
+            users <- options cp "USERS"
+            return users
+    return $ forceEither rv
 
 isMember = do
     mu <- maybeAuthId
     liftIO $ putStrLn $ "is memeber called with uid:" ++ show mu
+    authorized <- liftIO . getUsers $ "RoboSite.conf"
     return $ case mu of
         Nothing -> AuthenticationRequired
-        Just x -> if x `elem` authorized
+        Just x -> if x `elem` (map T.pack authorized)
                     then Authorized
                     else Unauthorized $ "User " `mappend` x `mappend` " not allowed to upload updates"
 
@@ -259,7 +264,6 @@ getUpdateExpForm eid = updateForm eid Nothing
 
 postUpdateLabel :: ExpId -> Plate -> Handler RepHtml
 postUpdateLabel eid p = do
-    let m_label = Just . Params . T.pack $ "default"
     ((res, widget), enctype) <- runFormPost labelUpdateForm
     output <-
         case res of
@@ -295,9 +299,6 @@ grids :: ExpId -> Plate -> [GraphDesc] -> [(MType,MType)]
 grids e p gd = zip (map head all_pairs) (map last all_pairs)
     where
         all_pairs = map (\x -> if head x == "OD600" then [last x, head x] else x) . combinationsOf 2 . expLevels e p $ gd
-
-postHomeR :: Handler ()
-postHomeR = redirect RedirectTemporary HomeR
 
 getHomeR :: Handler RepHtml
 getHomeR = do
