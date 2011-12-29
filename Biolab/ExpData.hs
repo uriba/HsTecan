@@ -18,16 +18,16 @@ import qualified Data.Map as M
 constantBackgroundMap :: ExpData -> MesTypeCorrectionVals
 constantBackgroundMap ed = fromList [(m, bg m) | m <- mes_types]
     where
-	bg m = mean . map mVal . filterByType m $ bg_mes 
-	mes_types = expMesTypes ed
-	bg_mes = concat . filter (not . liveWell) . M.elems $ (ed ! mediaId)
+        bg m = mean . map mVal . filterByType m $ bg_mes 
+        mes_types = expMesTypes ed
+        bg_mes = concat . filter (not . liveWell) . M.elems $ (ed ! mediaId)
 
 subtractConstantBackground :: ExpData -> ExpData
 subtractConstantBackground ed = M.map (M.map (map (\x -> x {mVal = corrected_mval x}))) ed
     where
-	background_map = constantBackgroundMap ed
-	corrected_mval m =
-	    let mt = mType m in max (minValMap ! mt) (mVal m - (background_map ! mt))
+        background_map = constantBackgroundMap ed
+        corrected_mval m =
+            let mt = mType m in max (minValMap ! mt) (mVal m - (background_map ! mt))
 
 expMesTypes :: ExpData -> [String]
 expMesTypes = nub . map mType . concat . concatMap M.elems . M.elems

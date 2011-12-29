@@ -124,7 +124,8 @@ postUploadedPlateDesc :: String -> String -> Handler RepHtml
 postUploadedPlateDesc eid p = do
     (_,files) <- runRequestBody
     liftIO . putStrLn $ "got post request for eid" ++ eid ++ " and plate:" ++ p
-    let parsed = fromRight . parse csvFile "" $ concatMap U.toString . BS.toChunks . fileContent . snd . head $ files
+    liftIO . putStrLn . show $ parse csvFile "" $ (concatMap U.toString . BS.toChunks . fileContent . snd . head $ files) ++ "\n"
+    let parsed = takeWhile (/= [""]) . fromRight . parse csvFile "" $ (concatMap U.toString . BS.toChunks . fileContent . snd . head $ files) ++ "\n"
     liftIO $ updatePlateLabels eid (read p) parsed
     liftIO . putStrLn . show $ parsed
     getHomeR
