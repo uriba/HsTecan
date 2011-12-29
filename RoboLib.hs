@@ -20,7 +20,7 @@ import Biolab.Measurement (mesByTime, valByTime, filterBy, toPoint)
 import Biolab.ExpData
 import Biolab.Utils.Vector (Series, Point)
 import Biolab.Patches (mean, isLegal)
-import Biolab.Processing (expressionLevelEstimate, expressionLevels, minDoublingTimeMinutes, doublingTimeMinutes)
+import Biolab.Processing (expressionLevelEstimate, expressionLevels, minDoublingTimeMinutes, doublingTimeMinutes, doublingTimeMinutesPerOD)
 
 -- Some types to make life easier...
 
@@ -35,7 +35,10 @@ timedDoublingTimes m ed = ldMap (\x -> removeIllegalPoints . doublingTimeMinutes
         od_mes = G.fromList . map toPoint . mesByTime m
 
 timedExpLevels :: MType -> ExpData -> ProcessedData
-timedExpLevels "OD600" _ = error "no expression level data for od"
+timedExpLevels "OD600" ed = ldMap (\x -> removeIllegalPoints . doublingTimeMinutesPerOD . od_mes $ x) . normalizePlate $ ed
+    where
+        fl_mes m = G.fromList . map toPoint . mesByTime m
+        od_mes = fl_mes "OD600"
 timedExpLevels m ed = ldMap (\x -> removeIllegalPoints . expressionLevels maturationTime (od_mes x) $ (fl_mes m x)) . normalizePlate $ ed
     where
         fl_mes m = G.fromList . map toPoint . mesByTime m

@@ -3,6 +3,7 @@ module Biolab.Processing (
     -- Biology related functions:
     minDoublingTimeMinutes,
     doublingTimeMinutes,
+    doublingTimeMinutesPerOD,
     expressionLevelEstimate,
     expressionLevels,
 )
@@ -22,8 +23,17 @@ import Data.Function (on)
 exponentialPhaseGrowthRateWindowMinutes = exponentialPhaseGrowthRateWindow / 60
 
 -- estimate max growth rate based on steepest slope of linear fit in log space of measurements given, running on a predefined length window.
+filterIrrelevantTimes :: [Point] -> Series
+filterIrrelevantTimes = G.fromList . filter ((300>) . snd) . filter ((10<) . snd)
+
+fitsData :: Series -> [(Double, FitData)]
+fitsData = filter ((0.90 <)  . fdRSqr . snd) . expFitWindow exponentialPhaseGrowthRateWindow
+
 doublingTimeMinutes :: Series -> Series
-doublingTimeMinutes = G.fromList . filter ((300>) . snd) . filter ((10<) . snd) . map (mapSnd ((/60) . (1/) .  fdAlpha)) . filter ((0.90 <)  . fdRSqr . snd) . expFitWindow exponentialPhaseGrowthRateWindow
+doublingTimeMinutes =  filterIrrelevantTimes . map (mapSnd ((/60) . (1/) .  fdAlpha)) . fitsData
+
+doublingTimeMinutesPerOD :: Series -> Series
+doublingTimeMinutesPerOD = filterIrrelevantTimes . map (\(_,fd) -> (2 ** (fdBeta fd), 1/(60*fdAlpha fd))) . fitsData
 
 minDoublingTimeMinutes :: Series -> Double
 minDoublingTimeMinutes s
