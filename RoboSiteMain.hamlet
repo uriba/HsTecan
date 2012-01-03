@@ -53,6 +53,12 @@
                                     <li>
                                         <a href=@{DoublingTimesGraph (fst exp) (fst plate) mtype}>
                                             #{mtype}
+                                        \ #
+                                        <a href=@{DoublingTimeCSV (fst exp) (fst plate) mtype}>
+                                            [Get minimal doubling times]
+                                        \ #
+                                        <a href=@{YieldsCSV (fst exp) (fst plate) mtype}>
+                                            [Get yields]
                         <li>
                             Expression levels
                             <ul>

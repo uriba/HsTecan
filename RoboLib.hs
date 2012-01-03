@@ -3,6 +3,7 @@ module RoboLib (
     timedExpLevels,
     timedDoublingTimes,
     intensityGridData,
+    estimatedData,
     wellStr,
     AxesTrans,
     )
@@ -45,6 +46,9 @@ timedExpLevels m ed = ldMap (\x -> removeIllegalPoints . expressionLevels matura
         od_mes = fl_mes "OD600"
 
 type AxesTrans = ((Double -> Double),(Double -> Double))
+
+estimatedData :: (Series -> Double) -> ExpData -> String -> MeasureData
+estimatedData f ed t = ldMap (f . G.fromList . map toPoint . mesByTime t) . normalizePlate $ ed
 
 intensityGridData :: ExpData -> (String,String) -> CorrelationData
 intensityGridData ed ("OD600",y) = intensityGridData ed (y, "OD600")

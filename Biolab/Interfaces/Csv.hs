@@ -2,6 +2,7 @@ module Biolab.Interfaces.Csv (
     loadExpData,
     processedDataToCSV,
     correlationDataToCSV,
+    measureDataToCSV,
 )
 where
 import Text.ParserCombinators.Parsec
@@ -44,6 +45,9 @@ processedDataToCSV = exportedDataToCSV . ldMap (map show . G.toList)
 
 correlationDataToCSV :: CorrelationData -> String
 correlationDataToCSV = exportedDataToCSV . ldMap (\(x,y) -> [show x, show y])
+
+measureDataToCSV :: MeasureData -> String
+measureDataToCSV = exportedDataToCSV . ldMap (return . show)
 
 toLines :: (ColonyId, [String]) -> [String]
 toLines (cid,xs) = [

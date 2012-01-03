@@ -6,6 +6,7 @@ module Biolab.Processing (
     doublingTimeMinutesPerOD,
     expressionLevelEstimate,
     expressionLevels,
+    yield,
 )
 where
 
@@ -101,3 +102,6 @@ expressionLevelByOD f mat_time ods fs = G.fromList . map (\(t,od) -> (od, f od m
 
 expressionLevels :: Seconds -> Series -> Series -> Series
 expressionLevels = expressionLevelByOD integralEstimation
+
+yield :: Series -> Double
+yield = mean . take 3 . drop 2 . reverse . sort . map snd . G.toList

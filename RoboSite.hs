@@ -15,11 +15,12 @@ import Data.List (nub, find, sort)
 import Data.Maybe (isJust, fromJust, fromMaybe)
 import Math.Combinatorics.Graph (combinationsOf)
 import Biolab.Interfaces.MySql (ExpDesc(..), PlateDesc(..), readTable, dbConnectInfo, loadExpDataDB)
-import RoboLib (timedMesData, timedExpLevels, timedDoublingTimes, intensityGridData)
-import Biolab.Interfaces.Csv (processedDataToCSV, correlationDataToCSV)
+import RoboLib (timedMesData, timedExpLevels, timedDoublingTimes, intensityGridData, estimatedData)
+import Biolab.Interfaces.Csv (processedDataToCSV, correlationDataToCSV, measureDataToCSV)
 import Biolab.Smoothing (bFiltS, smoothAll)
 import Biolab.Types (Measurement(..), ExpId, MType, ldMap, CorrelationData, ProcessedData, LabeledData)
 import Biolab.Patches (mapSnd, mapFst, mean)
+import Biolab.Processing (minDoublingTimeMinutes, yield)
 import qualified Data.Text as T
 import qualified Data.Map as M
 import Data.Map ((!))
@@ -144,6 +145,18 @@ getGridGraphData exp plate x y = do
     let sms = smoothAll bFiltS exp_data
     let igd = intensityGridData sms (x,y) 
     return $ igd
+
+getDoublingTimeCSV :: ExpId -> Plate -> MType -> Handler RepHtml
+getDoublingTimeCSV exp plate t = do
+    exp_data <- liftIO $ loadExpDataDB "RoboSite.conf" exp (read plate)
+    let bytes = measureDataToCSV . estimatedData minDoublingTimeMinutes exp_data $ t
+    sendResponse (typePlain, toContent bytes)
+
+getYieldsCSV :: ExpId -> Plate -> MType -> Handler RepHtml
+getYieldsCSV exp plate t = do
+    exp_data <- liftIO $ loadExpDataDB "RoboSite.conf" exp (read plate)
+    let bytes = measureDataToCSV . estimatedData yield exp_data $ t
+    sendResponse (typePlain, toContent bytes)
 
 getGridGraphCSV :: ExpId -> Plate -> MType -> MType -> Handler RepHtml
 getGridGraphCSV exp plate x y = do

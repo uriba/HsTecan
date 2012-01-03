@@ -14,6 +14,7 @@ module Biolab.Types (
     Seconds,
     ProcessedData,
     CorrelationData,
+    MeasureData,
     PlotData,
     ExportedData,
     wellStr,
@@ -72,4 +73,5 @@ type ExpData = LabeledData [Measurement] -- experiment data is mapped like this.
 type ProcessedData = LabeledData Series -- for each label - a list of colonies, for each colony - a line.
 type CorrelationData = LabeledData (Double,Double) -- for each label - a list of colonies, for each colony - a line.
 type ExportedData = LabeledData [String]
+type MeasureData = LabeledData Double
 data PlotData = LinesData ProcessedData | GridData CorrelationData
