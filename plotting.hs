@@ -3,7 +3,6 @@ import Biolab.Interfaces.MySql (readTable, edExp, loadExpDataDB, dbConnectInfo)
 import Biolab.Types (Measurement (..), ExpData, Well(..), ColonyId(..), wellStr)
 import Biolab.ExpData (normalizePlate)
 import Biolab.Patches (mapSnd)
-import Biolab.Constants (maturationTime)
 import Biolab.Processing (expressionLevels)
 import Biolab.Utils.Vector (expFitWindow, FitData(..))
 import qualified Data.List as L
@@ -56,8 +55,8 @@ displayLoop ed wd h = do
     let od_betas = normVals . map (\(x,y) -> (x,fdBeta y)) $ od_fits
     let mc_alphas = normVals . map (\(x,y) -> (x,fdAlpha y)) $ mc_fits
     let mc_betas = normVals . map (\(x,y) -> (x,fdBeta y)) $ mc_fits
-    let yf_exp = normVals . U.toList $ ((expressionLevels maturationTime) `on` U.fromList) od_pts yf_pts
-    let mc_exp = normVals . U.toList $ ((expressionLevels maturationTime) `on` U.fromList) od_pts mc_pts
+    let yf_exp = normVals . U.toList $ (expressionLevels `on` U.fromList) od_pts yf_pts
+    let mc_exp = normVals . U.toList $ (expressionLevels `on` U.fromList) od_pts mc_pts
     withPlotHandle h $ do
         withTitle $ setText . wellStr $ w
         setPlots 1 1

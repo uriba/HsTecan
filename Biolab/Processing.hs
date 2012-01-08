@@ -41,8 +41,8 @@ minDoublingTimeMinutes s
     | G.null (doublingTimeMinutes s) = 0
     | otherwise = minimum . drop 2 . map snd . G.toList . doublingTimeMinutes $ s
 
-realTime :: Seconds -> Series -> Series
-realTime s = vxMap (-(fromIntegral s) +)
+realTime :: Series -> Series
+realTime = vxMap (-(fromIntegral maturationTime) +)
 
 -- helper functions - should probably move elsewhere
 windowOfSize :: Int -> Double -> Series -> Series
@@ -67,40 +67,38 @@ mid_od = 0.1
 window_size = 5
 
 ---------------------------------------------------
-type ExpressionLevelEstimateAtConstOd = Double -> Seconds -> Series -> Series -> Double
+type ExpressionLevelEstimateAtConstOd = Double -> Series -> Series -> Double
 
 derivativeEstimation :: ExpressionLevelEstimateAtConstOd
-derivativeEstimation target_od mat_time ods fs = logBase 2 $ 0.1 + (derivate real_time_fs mid_od_time) / od_val
+derivativeEstimation target_od ods fs = logBase 2 $ 0.1 + (derivate (realTime fs) mid_od_time) / od_val
     where
-        real_time_fs = realTime mat_time fs
         (mid_od_time,od_val) = fromMaybe default_point . find ((target_od <) . snd) . G.toList $ ods
         default_point = G.head . G.drop 3 $ ods
 
 integralEstimation :: ExpressionLevelEstimateAtConstOd
-integralEstimation target_od mat_time ods fs = logBase 2 $ 0.1 + (abs $ delta real_time_fs mid_od_time) / integrate ods mid_od_time
+integralEstimation target_od ods fs = logBase 2 $ 0.1 + (abs $ delta (realTime fs) mid_od_time) / integrate ods mid_od_time
     where
-        real_time_fs = realTime mat_time fs
         mid_od_time = fst . fromMaybe default_point . find ((target_od <) . snd) . G.toList $ ods
         default_point = G.head . G.drop 3 $ ods
 
 
-meanEstimation :: ExpressionLevelEstimateAtConstOd -> Seconds -> Series -> Series -> Double
-meanEstimation f mat_time ods fs = mean . map (\x -> f x mat_time ods fs) $ od_vals
+meanEstimation :: ExpressionLevelEstimateAtConstOd -> Series -> Series -> Double
+meanEstimation f ods fs = mean . map (\x -> f x ods fs) $ od_vals
     where
         od_vals = take 5 . map snd . fromMaybe [] . find ((mid_od <) . snd . (!! 2)) . tails . G.toList $ ods
 
-expressionLevelEstimate :: Seconds -> Series -> Series -> Double
+expressionLevelEstimate :: Series -> Series -> Double
 expressionLevelEstimate = meanEstimation integralEstimation
 
 -- can be plugged into expressionLevels for interrogation.
-expressionLevelByOD :: ExpressionLevelEstimateAtConstOd -> Seconds -> Series -> Series -> Series
-expressionLevelByOD f mat_time ods fs = G.fromList . map (\(t,od) -> (od, f od mat_time real_ods fs)) . G.toList $ real_ods
+expressionLevelByOD :: ExpressionLevelEstimateAtConstOd -> Series -> Series -> Series
+expressionLevelByOD f ods fs = G.fromList . map (\(t,od) -> (od, f od real_ods fs)) . G.toList $ real_ods
     where
         real_ods = G.fromList . dropWhile ((min_od <) . snd) . takeWhile ((max_od >) . snd) . G.toList $ ods
         min_od = minimum . map snd . G.toList $ ods
         max_od = maximum . map snd . G.toList $ ods
 
-expressionLevels :: Seconds -> Series -> Series -> Series
+expressionLevels :: Series -> Series -> Series
 expressionLevels = expressionLevelByOD integralEstimation
 
 yield :: Series -> Double
