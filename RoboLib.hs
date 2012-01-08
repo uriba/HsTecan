@@ -4,64 +4,43 @@ module RoboLib (
     timedDoublingTimes,
     intensityGridData,
     estimatedData,
-    wellStr,
-    AxesTrans,
     )
 where
-import Data.Function (on)
-import Data.List
-import Data.Map ((!), Map(..), fromList)
-import Data.Maybe
-import Data.DateTime (DateTime, toSeconds)
-import qualified Data.Map as M
 import qualified Data.Vector.Generic as G
-import Biolab.Constants
-import Biolab.Types
-import Biolab.Measurement (mesByTime, valByTime, filterBy, toPoint)
-import Biolab.ExpData
-import Biolab.Utils.Vector (Series, Point)
-import Biolab.Patches (mean, isLegal)
+import Biolab.Constants (maturationTime)
+import Biolab.Types (ExpData, MType, ProcessedData, ldMap, MeasureData, CorrelationData, Measurement (..) )
+import Biolab.Measurement (mesByTime, toPoint)
+import Biolab.ExpData (normalizePlate, removeDeadWells)
+import Biolab.Utils.Vector (Series, removeIllegalPoints)
 import Biolab.Processing (expressionLevelEstimate, expressionLevels, minDoublingTimeMinutes, doublingTimeMinutes, doublingTimeMinutesPerOD)
 
--- Some types to make life easier...
+series :: MType -> [Measurement] -> Series
+series m = G.fromList . map toPoint . mesByTime m
 
 timedMesData :: ExpData -> MType -> ProcessedData
-timedMesData ed mt = ldMap (G.fromList . map (\x -> (fromIntegral . toSeconds . mTime $ x, mVal x)) . mesByTime mt) (normalizePlate ed)
-
-removeIllegalPoints = G.filter (isLegal . snd)
+timedMesData ed mt = ldMap (series mt) (normalizePlate ed)
 
 timedDoublingTimes :: MType -> ExpData -> ProcessedData
-timedDoublingTimes m ed = ldMap (\x -> removeIllegalPoints . doublingTimeMinutes . od_mes $ x) . normalizePlate  $ ed
-    where
-        od_mes = G.fromList . map toPoint . mesByTime m
+timedDoublingTimes m ed = ldMap (\x -> removeIllegalPoints . doublingTimeMinutes . series m $ x) . normalizePlate  $ ed
 
 timedExpLevels :: MType -> ExpData -> ProcessedData
 timedExpLevels "OD600" ed = ldMap (\x -> removeIllegalPoints . doublingTimeMinutesPerOD . od_mes $ x) . normalizePlate $ ed
     where
-        fl_mes m = G.fromList . map toPoint . mesByTime m
-        od_mes = fl_mes "OD600"
-timedExpLevels m ed = ldMap (\x -> removeIllegalPoints . expressionLevels maturationTime (od_mes x) $ (fl_mes m x)) . normalizePlate $ ed
+        od_mes = series "OD600"
+timedExpLevels m ed = ldMap (\x -> removeIllegalPoints . expressionLevels maturationTime (od_mes x) $ (series m x)) . normalizePlate $ ed
     where
-        fl_mes m = G.fromList . map toPoint . mesByTime m
-        od_mes = fl_mes "OD600"
-
-type AxesTrans = ((Double -> Double),(Double -> Double))
+        od_mes = series "OD600"
 
 estimatedData :: (Series -> Double) -> ExpData -> String -> MeasureData
-estimatedData f ed t = ldMap (f . G.fromList . map toPoint . mesByTime t) . normalizePlate $ ed
+estimatedData f ed t = ldMap (f . series t) . normalizePlate $ ed
 
 intensityGridData :: ExpData -> (String,String) -> CorrelationData
 intensityGridData ed ("OD600",y) = intensityGridData ed (y, "OD600")
-intensityGridData ed (xtype,"OD600") = grid_points
+intensityGridData ed (xtype,"OD600") = ldMap (\x -> (exp_level xtype $ x, minDoublingTimeMinutes . series "OD600" $ x)) ned
     where
         ned = removeDeadWells . normalizePlate $ ed
-        m_mes m = G.fromList . sortBy (compare `on` fst) . map (\x -> (fromIntegral . toSeconds . mTime $ x, mVal x)) . filter (\x -> mType x == m)
-        exp_level m ms = expressionLevelEstimate maturationTime (m_mes "OD600" ms) (m_mes m ms)
-        grid_points = ldMap (\x -> (exp_level xtype $ x, minDoublingTimeMinutes . m_mes "OD600" $ x)) ned
-
-intensityGridData ed (xtype,ytype) = grid_points
+        exp_level m ms = expressionLevelEstimate maturationTime (series "OD600" ms) (series m ms)
+intensityGridData ed (xtype,ytype) = ldMap (\x -> (exp_level xtype x,exp_level ytype $ x)) ned
     where
         ned = removeDeadWells . normalizePlate $ ed
-        m_mes m = G.fromList . sortBy (compare `on` fst) . map (\x -> (fromIntegral . toSeconds . mTime $ x, mVal x)) . filter (\x -> mType x == m)
-        exp_level mt ms = expressionLevelEstimate maturationTime (m_mes "OD600" ms) (m_mes mt ms)
-        grid_points = ldMap (\x -> (exp_level xtype x,exp_level ytype $ x)) ned
+        exp_level mt ms = expressionLevelEstimate maturationTime (series "OD600" ms) (series mt ms)

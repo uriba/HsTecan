@@ -16,8 +16,7 @@ import qualified Text.JSON as J
 import qualified Data.Map as M
 import qualified Data.Vector.Generic as G
 import Text.Printf (printf)
-import RoboLib (wellStr)
-import Biolab.Types (Well(..), Label, ColonyId(..))
+import Biolab.Types (Well(..), Label, ColonyId(..), wellStr)
 import Biolab.Utils.Vector
 import Data.Maybe (fromMaybe, fromJust)
 import Data.DateTime (toSeconds, DateTime)

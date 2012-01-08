@@ -6,11 +6,11 @@ module Biolab.Utils.Vector (
     expFitWindow,
     FitData(..),
     fitData,
-    range,
     ranges,
-    intersectingRanges,
     vxMap,
+    vyMap,
     subRange,
+    removeIllegalPoints,
 )
 where
 import qualified Data.Vector.Generic as G
@@ -19,7 +19,7 @@ import qualified Statistics.Sample as S
 import Biolab.Utils.LinearRegression (linearRegressionRSqr)
 import Data.Maybe (fromMaybe)
 import Control.Applicative (pure)
-import Biolab.Patches (mapFst, mapSnd)
+import Biolab.Patches (mapFst, mapSnd, isLegal)
 -- generic vector utils
 
 vyMap :: (G.Vector v (c,a), G.Vector v (c,b)) => (a -> b) -> v (c,a) -> v (c,b)
@@ -76,9 +76,6 @@ fitData s = (start,FitData { fdAlpha = a, fdBeta = b, fdRSqr = rs})
 expFitWindow :: Double -> Series -> [(Double,FitData)]
 expFitWindow span = map fitData . xSlidingWindow span . vyMap (logBase 2)
 
-range :: Num a => (a,a) -> a
-range (x,y) = y - x
-
 ranges' :: (G.Vector v (b,a)) => (a -> Bool) -> v (b,a) -> [(b,b)]
 ranges' f v
     | G.null v = []
@@ -99,14 +96,8 @@ intersect (a1,a2) (b1,b2)
             begin = max a1 b1 
             end = min a2 b2
 
-intersectingRanges :: (Ord a) => [(a,a)] -> [(a,a)] -> [(a,a)]
-intersectingRanges _ [] = []
-intersectingRanges [] _ = []
-intersectingRanges (a1:as) (b1:bs)
-    | snd a1 < snd b1 = first_plus $ intersectingRanges as (b1:bs)
-    | otherwise  = first_plus $ intersectingRanges (a1:as) bs
-        where
-            first_plus = (++) (fromMaybe [] . fmap pure $ (intersect a1 b1))
-
 subRange :: (Ord a) => (a,a) -> [(a,b)] -> [(a,b)]
 subRange (start,end) = dropWhile (\(x,y) -> x < start) . takeWhile (\(x,y) -> x < end)
+
+removeIllegalPoints :: (RealFloat b, G.Vector v (a,b)) => v (a,b) -> v (a,b)
+removeIllegalPoints = G.filter (isLegal . snd)
