@@ -6,24 +6,22 @@ import Text.Cassius
 import Yesod.Form.Fields (fileAFormReq)
 import Yesod.Form.Jquery
 import Yesod.Auth
-import Yesod.Auth.BrowserId
 import Yesod.Auth.GoogleEmail
 import Database.HDBC.MySQL
 import Database.HDBC
 import Data.ByteString.UTF8 (toString)
 import Data.List (nub, find, sort)
-import Data.Maybe (isJust, fromJust, fromMaybe)
+import Data.Maybe (fromMaybe)
 import Math.Combinatorics.Graph (combinationsOf)
 import Biolab.Interfaces.MySql (ExpDesc(..), PlateDesc(..), readTable, dbConnectInfo, loadExpDataDB)
 import Biolab.ExpData.Processing (timedMesData, timedExpLevels, timedDoublingTimes, intensityGridData, estimatedData)
 import Biolab.Interfaces.Csv (processedDataToCSV, correlationDataToCSV, measureDataToCSV)
 import Biolab.Smoothing (bFiltS, smoothAll)
-import Biolab.Types (Measurement(..), ExpId, MType, ldMap, CorrelationData, ProcessedData, LabeledData)
-import Biolab.Patches (mapSnd, mapFst, mean)
+import Biolab.Types (ExpData, MeasureData, ExpId, MType, ldMap, CorrelationData, ProcessedData)
+import Biolab.Patches (mapSnd, mapFst)
 import Biolab.Processing (minDoublingTimeMinutes, yield)
 import qualified Data.Text as T
 import qualified Data.Map as M
-import Data.Map ((!))
 import qualified Data.Vector.Generic as G
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.ByteString.UTF8 as U
@@ -34,7 +32,7 @@ import Text.ParserCombinators.Parsec (parse)
 import Data.CSV (csvFile)
 import Data.Either.Utils (forceEither, fromRight)
 import Data.Text (Text)
-import Data.Monoid
+import Data.Monoid (mappend)
 import Data.ConfigFile (emptyCP, readfile, options)
 import Control.Monad.Error (runErrorT)
 import Monad (join)
@@ -146,17 +144,17 @@ getGridGraphData exp plate x y = do
     let igd = intensityGridData sms (x,y) 
     return $ igd
 
-getDoublingTimeCSV :: ExpId -> Plate -> MType -> Handler RepHtml
-getDoublingTimeCSV exp plate t = do
+getMeasureDataCSV :: (MType -> ExpData -> MeasureData) -> ExpId -> Plate -> MType -> Handler RepHtml
+getMeasureDataCSV measure exp plate t = do
     exp_data <- liftIO $ loadExpDataDB "RoboSite.conf" exp (read plate)
-    let bytes = measureDataToCSV . estimatedData minDoublingTimeMinutes t $ exp_data
+    let bytes = measureDataToCSV . measure t $ exp_data
     sendResponse (typePlain, toContent bytes)
 
+getDoublingTimeCSV :: ExpId -> Plate -> MType -> Handler RepHtml
+getDoublingTimeCSV = getMeasureDataCSV (estimatedData minDoublingTimeMinutes)
+
 getYieldsCSV :: ExpId -> Plate -> MType -> Handler RepHtml
-getYieldsCSV exp plate t = do
-    exp_data <- liftIO $ loadExpDataDB "RoboSite.conf" exp (read plate)
-    let bytes = measureDataToCSV . estimatedData yield t $ exp_data
-    sendResponse (typePlain, toContent bytes)
+getYieldsCSV = getMeasureDataCSV (estimatedData yield)
 
 getGridGraphCSV :: ExpId -> Plate -> MType -> MType -> Handler RepHtml
 getGridGraphCSV exp plate x y = do
@@ -190,21 +188,22 @@ getDoublingTimesGraph exp plate t = do
     let chart_json = [chartTitle title, chartSubtitle subtitle, chartXaxis "Time" (Just "datetime") Nothing, chartYaxis t Nothing Nothing, lineChart div_obj, chartLegend, chartOptions] ++ linesChartSeries mpd
     graphPage title div_obj chart_json
 
-getExpLevelData :: ExpId -> Plate -> MType -> IO ProcessedData
-getExpLevelData exp plate t = do
+getProcessedData :: (MType -> ExpData -> ProcessedData) -> ExpId -> Plate -> MType -> IO ProcessedData
+getProcessedData process exp plate t = do
     exp_data <- liftIO $ loadExpDataDB "RoboSite.conf" exp (read plate)
-    let sms = smoothAll bFiltS exp_data
-    return $ timedExpLevels t sms
+    return $ process t exp_data
+
+getProcessedCSV :: (MType -> ExpData -> ProcessedData) -> ExpId -> Plate -> MType -> Handler RepHtml
+getProcessedCSV process exp plate t = do
+    processed <- liftIO $ getProcessedData process exp plate t
+    sendResponse (typePlain, toContent . processedDataToCSV $ processed)
 
 getExpLevelCSV :: ExpId -> Plate -> MType -> Handler RepHtml
-getExpLevelCSV exp plate t = do
-    pd <- liftIO $ getExpLevelData exp plate t
-    let bytes = processedDataToCSV pd
-    sendResponse (typePlain, toContent bytes)
+getExpLevelCSV = getProcessedCSV timedExpLevels
 
 getExpLevelGraph :: ExpId -> Plate -> MType -> Handler RepHtml
 getExpLevelGraph exp plate t = do
-    pd <- liftIO $ getExpLevelData exp plate t
+    pd <- liftIO $ getProcessedData timedExpLevels exp plate t
     let div_obj = "container"
     let page_title = t ++ ", " ++ plate ++ " - " ++ exp
     let title = t ++ " Expression level"
@@ -212,16 +211,8 @@ getExpLevelGraph exp plate t = do
     let chart_json = [chartTitle title, chartSubtitle subtitle, chartXaxis "OD" Nothing Nothing, chartYaxis t Nothing Nothing, lineChart div_obj, chartLegend, chartOptions] ++ linesChartSeries pd
     graphPage title div_obj chart_json
 
-getReadGraphData :: ExpId -> Plate -> MType -> IO ProcessedData
-getReadGraphData exp plate t = do
-    exp_data <- liftIO $ loadExpDataDB "RoboSite.conf" exp (read plate)
-    return $ timedMesData t exp_data
-
 getReadGraphCSV :: ExpId -> Plate -> MType -> Handler RepHtml
-getReadGraphCSV exp plate t = do
-    pd <- liftIO $ getReadGraphData exp plate t
-    let bytes = processedDataToCSV pd
-    sendResponse (typePlain, toContent bytes)
+getReadGraphCSV = getProcessedCSV timedMesData
 
 getLogReadGraph :: ExpId -> Plate -> MType -> Handler RepHtml
 getLogReadGraph = getTransformedReadGraph (logBase 2) "Log scale"
@@ -234,7 +225,7 @@ convertTimeToMS = ldMap (G.map (mapFst (*1000)))
     
 getTransformedReadGraph :: (Double -> Double) -> String -> ExpId -> Plate -> MType -> Handler RepHtml
 getTransformedReadGraph f desc exp plate t = do
-    pdt <- liftIO $ getReadGraphData exp plate t
+    pdt <- liftIO $ getProcessedData timedMesData exp plate t
     let pd = M.delete "NULL" pdt
     let mpd = convertTimeToMS . ldMap (G.map (mapSnd f)) $ pd
     let div_obj = "container"
