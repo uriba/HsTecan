@@ -1,4 +1,4 @@
-import RoboLib
+import Biolab.ExpData.Processing (timedMesData, intensityGridData)
 import Biolab.Interfaces.Csv (processedDataToCSV, correlationDataToCSV, loadExpData)
 import Biolab.Smoothing
 import Biolab.Patches (has)
@@ -32,7 +32,7 @@ options = [
 
 plotMesApp :: ExpData -> Maybe FilePath -> String -> IO ()
 plotMesApp ed mfn t = do
-    let pd = timedMesData ed t
+    let pd = timedMesData t ed
     let	ofn = fmap (\x -> x ++ t ++ ".svg") mfn
     plotData t pd ofn 
     let	dfn = (fromMaybe ("graph") mfn) ++ t ++ "data.csv"

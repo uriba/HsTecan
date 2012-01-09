@@ -9,6 +9,7 @@ module Biolab.Types (
     Measurement(..),
     LabeledData(..),
     ldMap,
+    ldZip,
     ExpData,
     colonyId,
     Seconds,
@@ -68,6 +69,9 @@ type LabeledData a = Map Label (Map ColonyId a)
     
 ldMap :: (a -> b) -> LabeledData a -> LabeledData b
 ldMap f = M.map (M.map f)
+
+ldZip :: (a -> b -> c) -> LabeledData a -> LabeledData b -> LabeledData c
+ldZip f = M.intersectionWith (M.intersectionWith f)
 
 type ExpData = LabeledData [Measurement] -- experiment data is mapped like this.
 type ProcessedData = LabeledData Series -- for each label - a list of colonies, for each colony - a line.
