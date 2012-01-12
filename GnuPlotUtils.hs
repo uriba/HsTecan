@@ -7,7 +7,7 @@ where
 import Graphics.Gnuplot.Simple
 import Biolab.Types (ExpData(..), MType, ProcessedData, CorrelationData)
 import Biolab.Utils.Vector (Point)
-import Biolab.ExpData.Processing (timedMesData, intensityGridData)
+import Biolab.ExpData.Processing (rawMesData, intensityGridData)
 import qualified Data.Map as M
 import qualified Data.Vector.Generic as G
 import Data.Maybe (fromMaybe)
@@ -27,7 +27,7 @@ plotData title pld m_fn = do
     plotPathsStyle ([Title title] ++ fileoptions) plot_data
 
 plotTimedMesData :: ExpData -> MType -> Maybe FilePath -> IO()
-plotTimedMesData ed  mt m_fn = plotData mt (timedMesData mt ed) m_fn
+plotTimedMesData ed  mt m_fn = plotData mt (rawMesData mt ed) m_fn
 
 plotGrid :: String -> CorrelationData -> (String,String) -> Maybe FilePath -> IO ()
 plotGrid title pgd (xtype,ytype) m_fn = plotPathsStyle plot_attrs plot_lines
@@ -40,7 +40,7 @@ plotGrid title pgd (xtype,ytype) m_fn = plotPathsStyle plot_attrs plot_lines
 plotIntensityGrid :: ExpData -> (String, String) -> Maybe FilePath -> IO ()
 plotIntensityGrid ed axes m_fn = plotGrid "Log scale grid plot" pgd axes m_fn
     where
-	pgd = intensityGridData ed axes
+	pgd = intensityGridData axes ed
 
 fileOpts :: String -> [Attribute]
 fileOpts fn = [ Custom "terminal" ["png", "size 1000,1000"], Custom "output" ["\"" ++ fn ++ "\""]]

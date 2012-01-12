@@ -9,7 +9,8 @@ module HighChartsJson (
     chartOptions,
     gridChartSeries,
     linesChartSeries,
-    colorsArray
+    colorsArray,
+    JSObj,
 )
 where
 import qualified Text.JSON as J

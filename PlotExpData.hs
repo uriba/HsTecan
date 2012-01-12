@@ -1,4 +1,4 @@
-import Biolab.ExpData.Processing (timedMesData, intensityGridData)
+import Biolab.ExpData.Processing (rawMesData, intensityGridData)
 import Biolab.Interfaces.Csv (processedDataToCSV, correlationDataToCSV, loadExpData)
 import Biolab.Smoothing
 import Biolab.Patches (has)
@@ -32,7 +32,7 @@ options = [
 
 plotMesApp :: ExpData -> Maybe FilePath -> String -> IO ()
 plotMesApp ed mfn t = do
-    let pd = timedMesData t ed
+    let pd = rawMesData t ed
     let	ofn = fmap (\x -> x ++ t ++ ".svg") mfn
     plotData t pd ofn 
     let	dfn = (fromMaybe ("graph") mfn) ++ t ++ "data.csv"
@@ -43,7 +43,7 @@ plotGridApp :: ExpData -> (String,String) -> Maybe FilePath -> IO ()
 plotGridApp ed axes mfn = do
     let ofn = fmap (\x -> x ++ "grid.svg") mfn
     plotIntensityGrid ed axes ofn
-    let igd = intensityGridData ed axes
+    let igd = intensityGridData axes ed
     let	dfn = (fromMaybe ("graph") mfn) ++ "Griddata.csv"
     let file_data = correlationDataToCSV $ igd
     writeFile dfn file_data

@@ -1,5 +1,6 @@
 module Biolab.ExpData.Processing (
-    timedMesData,
+    rawMesData,
+    normedMesData,
     timedExpLevels,
     timedDoublingTimes,
     intensityGridData,
@@ -18,27 +19,28 @@ import Data.Function (on)
 series :: MType -> [Measurement] -> Series
 series m = G.fromList . map toPoint . mesByTime m
 
-timedMesData :: MType -> ExpData -> ProcessedData
-timedMesData m = ldMap (series m) . normalizePlate
+rawMesData :: MType -> ExpData -> ProcessedData
+rawMesData m = ldMap (series m)
+
+normedMesData :: MType -> ExpData -> ProcessedData
+normedMesData m = rawMesData m . normalizePlate
 
 timedDoublingTimes :: MType -> ExpData -> ProcessedData
-timedDoublingTimes m = ldMap (removeIllegalPoints . doublingTimeMinutes) . timedMesData m
+timedDoublingTimes m = ldMap (removeIllegalPoints . doublingTimeMinutes) . normedMesData m
 
 timedExpLevels :: MType -> ExpData -> ProcessedData
-timedExpLevels "OD600" ed = ldMap (\x -> removeIllegalPoints . doublingTimeMinutesPerOD . series "OD600" $ x) . normalizePlate $ ed
-timedExpLevels m ed = ldMap (\x -> removeIllegalPoints . expressionLevels (series "OD600" $ x) $ (series m x)) . normalizePlate $ ed
+timedExpLevels "OD600" ed = ldMap (removeIllegalPoints . doublingTimeMinutesPerOD) . normedMesData "OD600" $ ed
+timedExpLevels m ed = ldZip expressionLevels (normedMesData "OD600" ed) (normedMesData m ed)
 
 estimatedData :: (Series -> Double) -> MType -> ExpData -> MeasureData
-estimatedData f m = ldMap f . timedMesData m
+estimatedData f m = ldMap f . normedMesData m
 
 expressionLevelData :: MType -> ExpData -> MeasureData
-expressionLevelData m ed = ldZip expressionLevelEstimate (timedMesData "OD600" ed) (timedMesData m ed)
+expressionLevelData m ed = ldZip expressionLevelEstimate (normedMesData "OD600" ned) (normedMesData m ned)
+    where
+        ned = removeDeadWells $ ed
 
-intensityGridData :: ExpData -> (String,String) -> CorrelationData
-intensityGridData ed ("OD600",y) = intensityGridData ed (y,"OD600")
-intensityGridData ed (x,"OD600") = ldZip (,) (expressionLevelData x ned) (estimatedData minDoublingTimeMinutes "OD600" ned)
-    where
-        ned = removeDeadWells . normalizePlate $ ed
-intensityGridData ed (x,y) = ldZip (,) (expressionLevelData x ned) (expressionLevelData y ned)
-    where
-        ned = removeDeadWells . normalizePlate $ ed
+intensityGridData :: (MType,MType) -> ExpData -> CorrelationData
+intensityGridData ("OD600",y) ed = intensityGridData (y,"OD600") ed
+intensityGridData (x,"OD600") ed = ldZip (,) (expressionLevelData x ed) (estimatedData minDoublingTimeMinutes "OD600" ed)
+intensityGridData (x,y) ed = ldZip (,) (expressionLevelData x ed) (expressionLevelData y ed)

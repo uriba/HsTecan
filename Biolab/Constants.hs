@@ -25,7 +25,7 @@ mediaId = "BLANK"  -- label of colonies that have no bacteria (for background ca
 minValMap :: MesTypeCorrectionVals
 minValMap = fromList [("OD600",0.005), ("YFP", 20), ("MCHERRY",10),("CFP",10), ("GFP",10)]
 
-odLiveThreshold = 0.05
+odLiveThreshold = 0.1
 stdMinOd = 0.04
 bubbleTime = 7200 -- the time since the beginnig of the experiment during which OD values might be affected by condensation
 
