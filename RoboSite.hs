@@ -16,9 +16,8 @@ import Math.Combinatorics.Graph (combinationsOf)
 import Biolab.Interfaces.MySql (ExpDesc(..), PlateDesc(..), readTable, dbConnectInfo, loadExpDataDB)
 import Biolab.ExpData.Processing (rawMesData, timedExpLevels, timedDoublingTimes, intensityGridData, estimatedData)
 import Biolab.Interfaces.Csv (processedDataToCSV, correlationDataToCSV, measureDataToCSV)
-import Biolab.Smoothing (bFiltS, smoothAll)
 import Biolab.Types (ExpData, MeasureData, ExpId, MType, ldMap, CorrelationData, ProcessedData)
-import Biolab.Patches (mapSnd, mapFst)
+import Biolab.Patches (mapFst)
 import Biolab.Processing (minDoublingTimeMinutes, yield)
 import RoboSiteCore.Graph (rawMesGraph, logRawMesGraph, doublingTimesGraph, expLevelGraph, Graph(..), AxisDesc (..), AxisType (..), PlotData(..), expLevelsGrid)
 import qualified Data.Text as T
@@ -130,14 +129,6 @@ postUploadedPlateDesc eid p = do
     liftIO . putStrLn . show $ parsed
     getHomeR
 
-graphPage :: String -> String -> [(String,J.JSValue)] -> Handler RepHtml
-graphPage title div chart_json = do
-    let json_data = J.encode . J.makeObj $ chart_json
-    defaultLayout $ do
-        setTitle . toHtml $ title
-        addJulius $(juliusFile "HighChartsGraph.julius")
-        addHamlet $(hamletFile "GraphPage.hamlet")
-
 getExpData :: ExpId -> Plate -> IO ExpData
 getExpData eid plate = loadExpDataDB "RoboSite.conf" eid (read plate)
 
@@ -203,7 +194,7 @@ getGraphPage :: Graph -> ExpId -> Plate -> Handler RepHtml
 getGraphPage g exp plate = do
     ed <- liftIO $ getExpData exp plate
     let (chart_series,x_axis_type, plot_type) = plotDataToHighChartsData g . graphGenerator g $ ed
-    let div_obj = "container"
+    let div = "container"
     let page_title = graphTitle g
     let title = graphTitle g
     let subtitle = "Experiment: " ++ exp ++ ", Plate: " ++ plate
@@ -212,10 +203,14 @@ getGraphPage g exp plate = do
             chartSubtitle subtitle,
             chartXaxis (axisTitle . graphXAxis $ g) x_axis_type Nothing,
             chartYaxis (axisTitle . graphYAxis $ g) Nothing Nothing,
-            plot_type div_obj,
+            plot_type div,
             chartLegend,
             chartOptions] ++ chart_series
-    graphPage title div_obj chart_json
+    let json_data = J.encode . J.makeObj $ chart_json
+    defaultLayout $ do
+        setTitle . toHtml . T.pack $ title
+        addJulius $(juliusFile "HighChartsGraph.julius")
+        addHamlet $(hamletFile "GraphPage.hamlet")
 
 updateWellLabel :: ExpId -> Int -> Int -> Int -> String -> IO ()
 updateWellLabel eid p r c l = do
