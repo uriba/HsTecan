@@ -70,7 +70,7 @@
                                         <a href=@{ExpLevelCSV (fst exp) (fst plate) mtype}>
                                             [Get data]
                         <li>
-                            Grids
+                            Expression level grids
                             <ul>
                                 $forall grid <- grids (fst exp) (fst plate) disp_data
                                     <li>
@@ -80,3 +80,13 @@
                                         <a href=@{GridGraphCSV (fst exp) (fst plate) (fst grid) (snd grid)}>
                                             [Get data]
 
+                        <li>
+                            Doubling time correlations
+                            <ul>
+                                $forall mtype <- expLevels (fst exp) (fst plate) disp_data
+                                    <li>
+                                        <a href=@{DoublingTimeExpLevel (fst exp) (fst plate) mtype}>
+                                            #{mtype},Doubling time
+                                        \ #
+                                        <a href=@{DoublingTimeExpLevelCSV (fst exp) (fst plate) mtype}>
+                                            [Get data]

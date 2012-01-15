@@ -4,6 +4,7 @@ module Biolab.ExpData.Processing (
     timedExpLevels,
     timedDoublingTimes,
     intensityGridData,
+    doublingTimeCorrelationData,
     estimatedData,
     )
 where
@@ -41,6 +42,9 @@ expressionLevelData m ed = ldZip expressionLevelEstimate (normedMesData "OD600" 
         ned = removeDeadWells $ ed
 
 intensityGridData :: (MType,MType) -> ExpData -> CorrelationData
-intensityGridData ("OD600",y) ed = intensityGridData (y,"OD600") ed
-intensityGridData (x,"OD600") ed = ldZip (,) (expressionLevelData x ed) (estimatedData minDoublingTimeMinutes "OD600" ed)
+intensityGridData ("OD600",_) _ = error "unable to calculate expression level for OD measurements"
+intensityGridData (_,"OD600") _ = error "unable to calculate expression level for OD measurements"
 intensityGridData (x,y) ed = ldZip (,) (expressionLevelData x ed) (expressionLevelData y ed)
+
+doublingTimeCorrelationData :: MType -> ExpData -> CorrelationData
+doublingTimeCorrelationData t ed = ldZip (,) (expressionLevelData t ed) (estimatedData minDoublingTimeMinutes "OD600" ed)

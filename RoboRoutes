@@ -15,3 +15,5 @@
 /RoboSite/data/#ExpId/#Plate/#GraphType/Exp ExpLevelCSV GET
 /RoboSite/graph/#ExpId/#Plate/#GraphType/#GraphType/Exp GridGraph GET
 /RoboSite/data/#ExpId/#Plate/#GraphType/#GraphType/Exp GridGraphCSV GET
+/RoboSite/graph/#ExpId/#Plate/#GraphType/DoubleExp DoublingTimeExpLevel GET
+/RoboSite/data/#ExpId/#Plate/#GraphType/DoubleExp DoublingTimeExpLevelCSV GET

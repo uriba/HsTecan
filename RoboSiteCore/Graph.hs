@@ -9,11 +9,12 @@ module RoboSiteCore.Graph (
     doublingTimesGraph,
     expLevelGraph,
     expLevelsGrid,
+    doublingTimeCorrelation,
     PlotData(..),
 )
 
 where
-import Biolab.ExpData.Processing (intensityGridData, rawMesData, timedDoublingTimes, timedExpLevels, normedMesData, )
+import Biolab.ExpData.Processing (doublingTimeCorrelationData, intensityGridData, rawMesData, timedDoublingTimes, timedExpLevels, normedMesData, )
 import Biolab.ExpData (normalizePlate)
 import Biolab.Types (ProcessedData, CorrelationData, ExpData, ldMap, MType)
 import Biolab.Patches (mapFst, mapSnd)
@@ -72,6 +73,14 @@ expLevelsGrid (tx,ty) = Graph {
    graphXAxis = AxisDesc ("Log " ++ tx ++ " Expression level") Values,
    graphYAxis = AxisDesc ("Log " ++ ty ++ " Expression level") Values,
    graphTitle = "(" ++ tx ++ "," ++ ty ++ ") Expression levels"
+}
+
+doublingTimeCorrelation :: MType -> Graph
+doublingTimeCorrelation t = Graph {
+   graphGenerator = GridPlot . doublingTimeCorrelationData t,
+   graphXAxis = AxisDesc ("Log " ++ t ++ " Expression level") Values,
+   graphYAxis = AxisDesc ("Doubling time (minutes)") Values,
+   graphTitle = "(" ++ t ++ ",Doubling time)"
 }
 
 transformAxis :: ((Double,Double) -> (Double,Double)) -> PlotData -> PlotData

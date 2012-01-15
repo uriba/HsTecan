@@ -14,12 +14,12 @@ import Data.List (nub, find, sort)
 import Data.Maybe (fromMaybe)
 import Math.Combinatorics.Graph (combinationsOf)
 import Biolab.Interfaces.MySql (ExpDesc(..), PlateDesc(..), readTable, dbConnectInfo, loadExpDataDB)
-import Biolab.ExpData.Processing (rawMesData, timedExpLevels, timedDoublingTimes, intensityGridData, estimatedData)
+import Biolab.ExpData.Processing (rawMesData, timedExpLevels, timedDoublingTimes, intensityGridData, estimatedData, doublingTimeCorrelationData)
 import Biolab.Interfaces.Csv (processedDataToCSV, correlationDataToCSV, measureDataToCSV)
 import Biolab.Types (ExpData, MeasureData, ExpId, MType, ldMap, CorrelationData, ProcessedData)
 import Biolab.Patches (mapFst)
 import Biolab.Processing (minDoublingTimeMinutes, yield)
-import RoboSiteCore.Graph (rawMesGraph, logRawMesGraph, doublingTimesGraph, expLevelGraph, Graph(..), AxisDesc (..), AxisType (..), PlotData(..), expLevelsGrid)
+import RoboSiteCore.Graph (rawMesGraph, logRawMesGraph, doublingTimesGraph, expLevelGraph, Graph(..), AxisDesc (..), AxisType (..), PlotData(..), expLevelsGrid, doublingTimeCorrelation)
 import qualified Data.Text as T
 import qualified Data.Map as M
 import qualified Data.Vector.Generic as G
@@ -153,6 +153,15 @@ getGridGraphCSV exp plate x y = do
 getGridGraph :: ExpId -> Plate -> MType -> MType -> Handler RepHtml
 getGridGraph exp plate x y = getGraphPage (expLevelsGrid (x,y)) exp plate
 
+getDoublingTimeExpLevelCSV :: ExpId -> Plate -> MType -> Handler RepHtml
+getDoublingTimeExpLevelCSV exp plate x = do
+    exp_data <- liftIO $ getExpData exp plate
+    let bytes = correlationDataToCSV . doublingTimeCorrelationData x $ exp_data
+    sendResponse (typePlain, toContent bytes)
+
+getDoublingTimeExpLevel :: ExpId -> Plate -> MType -> Handler RepHtml
+getDoublingTimeExpLevel exp plate x = getGraphPage (doublingTimeCorrelation x) exp plate
+
 getDoublingTimesGraph :: ExpId -> Plate -> MType -> Handler RepHtml
 getDoublingTimesGraph exp plate t = getGraphPage (doublingTimesGraph t) exp plate
 
@@ -275,12 +284,12 @@ readings :: ExpId -> Plate -> [GraphDesc] -> [MType]
 readings eid p = nub . map gdMesType . filter (\x -> gdExp x == eid && gdPlate x == p)
 
 expLevels :: ExpId -> Plate -> [GraphDesc] -> [MType]
-expLevels e p = readings e p
+expLevels eid p = filter (/= "OD600") . readings eid p
 
 grids :: ExpId -> Plate -> [GraphDesc] -> [(MType,MType)]
 grids e p gd = zip (map head all_pairs) (map last all_pairs)
     where
-        all_pairs = map (\x -> if head x == "OD600" then [last x, head x] else x) . combinationsOf 2 . expLevels e p $ gd
+        all_pairs = combinationsOf 2 . expLevels e p $ gd
 
 getHomeR :: Handler RepHtml
 getHomeR = do
