@@ -13,6 +13,7 @@
 /RoboSite/graph/#ExpId/#Plate/#GraphType/DoublingEst DoublingTimeCSV GET
 /RoboSite/graph/#ExpId/#Plate/#GraphType/YieldEst YieldsCSV GET
 /RoboSite/data/#ExpId/#Plate/#GraphType/Exp ExpLevelCSV GET
+/RoboSite/data/#ExpId/#Plate/#GraphType/ExpAtOD ExpLevelAtConstODCSV GET
 /RoboSite/graph/#ExpId/#Plate/#GraphType/#GraphType/Exp GridGraph GET
 /RoboSite/data/#ExpId/#Plate/#GraphType/#GraphType/Exp GridGraphCSV GET
 /RoboSite/graph/#ExpId/#Plate/#GraphType/DoubleExp DoublingTimeExpLevel GET

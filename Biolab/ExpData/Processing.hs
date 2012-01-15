@@ -6,6 +6,7 @@ module Biolab.ExpData.Processing (
     intensityGridData,
     doublingTimeCorrelationData,
     estimatedData,
+    expressionLevelData,
     )
 where
 import qualified Data.Vector.Generic as G

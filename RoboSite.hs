@@ -14,7 +14,7 @@ import Data.List (nub, find, sort)
 import Data.Maybe (fromMaybe)
 import Math.Combinatorics.Graph (combinationsOf)
 import Biolab.Interfaces.MySql (ExpDesc(..), PlateDesc(..), readTable, dbConnectInfo, loadExpDataDB)
-import Biolab.ExpData.Processing (rawMesData, timedExpLevels, timedDoublingTimes, intensityGridData, estimatedData, doublingTimeCorrelationData)
+import Biolab.ExpData.Processing (expressionLevelData, rawMesData, timedExpLevels, timedDoublingTimes, intensityGridData, estimatedData, doublingTimeCorrelationData)
 import Biolab.Interfaces.Csv (processedDataToCSV, correlationDataToCSV, measureDataToCSV)
 import Biolab.Types (ExpData, MeasureData, ExpId, MType, ldMap, CorrelationData, ProcessedData)
 import Biolab.Patches (mapFst)
@@ -170,6 +170,9 @@ getProcessedCSV process exp plate t = do
     exp_data <- liftIO $ getExpData exp plate
     let processed = process t exp_data
     sendResponse (typePlain, toContent . processedDataToCSV $ processed)
+
+getExpLevelAtConstODCSV :: ExpId -> Plate -> MType -> Handler RepHtml
+getExpLevelAtConstODCSV = getMeasureDataCSV (expressionLevelData)
 
 getExpLevelCSV :: ExpId -> Plate -> MType -> Handler RepHtml
 getExpLevelCSV = getProcessedCSV timedExpLevels

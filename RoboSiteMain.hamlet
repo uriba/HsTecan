@@ -69,6 +69,9 @@
                                         \ #
                                         <a href=@{ExpLevelCSV (fst exp) (fst plate) mtype}>
                                             [Get data]
+                                        \ #
+                                        <a href=@{ExpLevelAtConstODCSV (fst exp) (fst plate) mtype}>
+                                            [Get expression level estimate at const OD]
                         <li>
                             Expression level grids
                             <ul>
