@@ -49,7 +49,7 @@
                         <li>
                             Doubling times
                             <ul>
-                                $forall mtype <- expLevels (fst exp) (fst plate) disp_data
+                                $forall mtype <- readings (fst exp) (fst plate) disp_data
                                     <li>
                                         <a href=@{DoublingTimesGraph (fst exp) (fst plate) mtype}>
                                             #{mtype}

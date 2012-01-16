@@ -49,3 +49,4 @@ intensityGridData (x,y) ed = ldZip (,) (expressionLevelData x ed) (expressionLev
 
 doublingTimeCorrelationData :: MType -> ExpData -> CorrelationData
 doublingTimeCorrelationData t ed = ldZip (,) (expressionLevelData t ed) (estimatedData minDoublingTimeMinutes "OD600" ed)
+
