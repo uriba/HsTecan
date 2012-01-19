@@ -19,7 +19,7 @@ maxMes :: Double
 maxMes = 70000
 
 wildTypeId = "WT" -- label of colonies that have wt bacteria (for auto-fluorescence cancellation)
-mediaId = "BLANK"  -- label of colonies that have no bacteria (for background cancellation)
+mediaId = ["BLANK", "Blank"]  -- label of colonies that have no bacteria (for background cancellation)
 
 -- When subtracting background noise these are the minimal legal values.
 minValMap :: MesTypeCorrectionVals

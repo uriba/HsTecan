@@ -73,13 +73,16 @@ derivativeEstimation :: ExpressionLevelEstimateAtConstOd
 derivativeEstimation target_od ods fs = logBase 2 $ 0.1 + (derivate (realTime fs) mid_od_time) / od_val
     where
         (mid_od_time,od_val) = fromMaybe default_point . find ((target_od <) . snd) . G.toList $ ods
-        default_point = G.head . G.drop 3 $ ods
+        default_point = G.head . G.drop 3 . check $ ods
+
+check :: Series -> Series
+check v = if G.length v < 4 then error "too short" else v
 
 integralEstimation :: ExpressionLevelEstimateAtConstOd
 integralEstimation target_od ods fs = logBase 2 $ 0.1 + (abs $ delta (realTime fs) mid_od_time) / integrate ods mid_od_time
     where
         mid_od_time = fst . fromMaybe default_point . find ((target_od <) . snd) . G.toList $ ods
-        default_point = G.head . G.drop 3 $ ods
+        default_point = G.head . G.drop 3 . check $ ods
 
 
 meanEstimation :: ExpressionLevelEstimateAtConstOd -> Series -> Series -> Double
