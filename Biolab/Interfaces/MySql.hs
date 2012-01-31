@@ -79,14 +79,20 @@ instance DbReadable WellDesc where
             wdDesc = toString desc
         }
 
-data PlateDesc = PlateDesc {pdExp :: ExpId, pdPlate :: Int, pdDesc :: String} deriving (Show)
+data PlateDesc = PlateDesc {pdExp :: ExpId, pdPlate :: Int, pdDesc :: String, pdOwner :: Maybe String, pdProject :: Maybe String} deriving (Show)
+
+fromNullString :: SqlValue -> Maybe String
+fromNullString SqlNull = Nothing
+fromNullString (SqlByteString s) = Just . toString $ s
 
 instance DbReadable PlateDesc where
-    dbRead [SqlByteString exp_id, SqlInt32 p, SqlByteString desc] = 
+    dbRead [SqlByteString exp_id, SqlInt32 p, SqlByteString desc, owner, project] = --SqlByteString owner, SqlByteString project] = 
         PlateDesc {
             pdExp = toString exp_id,
             pdPlate = fromIntegral p,
-            pdDesc = toString desc
+            pdDesc = toString desc,
+            pdOwner = fromNullString owner,
+            pdProject = fromNullString project
         }
 
 data DbMeasurement = DbMeasurement { dbmExpDesc :: ExpId, dbmPlate :: Int, dbmTime :: DateTime, dbmType :: MType, dbmWell :: Well, dbmVal :: Double } deriving (Eq, Show)
