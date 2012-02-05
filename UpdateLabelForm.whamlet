@@ -1,5 +1,5 @@
 <p>Enter new label
-<form method=post action=@{UpdateLabel eid (fromMaybe "-1" mp)} enctype=#{enctype}>
+<form method=post action=@{UpdateLabel eid mp} enctype=#{enctype}>
     <table>
         ^{widget}
         <tr>

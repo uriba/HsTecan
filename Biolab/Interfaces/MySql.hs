@@ -8,7 +8,8 @@ module Biolab.Interfaces.MySql (
     readTable,
     dbConnectInfo,
     mesFromDB,
-    loadExpDataDB
+    loadExpDataDB,
+    fromNullString
     )
 where
 import Database.HDBC.MySQL
@@ -68,7 +69,7 @@ instance DbReadable ExpDesc where
             edDesc = toString desc
         }
 
-data WellDesc = WellDesc {wdExp :: ExpId, wdPlate :: Int, wdWell :: Well, wdDesc :: String} deriving (Show)
+data WellDesc = WellDesc {wdExp :: ExpId, wdPlate :: Int, wdWell :: Well, wdDesc :: String} deriving (Show, Eq)
 
 instance DbReadable WellDesc where
     dbRead [SqlByteString exp_id, SqlInt32 p, SqlInt32 row, SqlInt32 col, SqlByteString desc] = 

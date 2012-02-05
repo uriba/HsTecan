@@ -1,0 +1,99 @@
+<p class="login">
+    $maybe user <- maid
+        #{show user} #
+        <a href=@{AuthR LogoutR}>
+            Logout
+    $nothing
+        <a href=@{AuthR LoginR}>
+            Login
+<h1>
+        Experiment: #{exp}, Plate: #{plate}
+<h4>
+    Plate description:
+#{plate_desc}
+<a href=@{UpdatePlateLabelForm (exp) (plate)}>
+    [Update plate label]
+<a href=@{UploadPlateDesc (exp) (plate)}>
+    [Upload well labels]
+
+<table>
+    <tr>
+        <td>
+            <h4>
+                Graphs:
+            <ul>
+                <li>
+                    Raw sensor readings
+                    <ul>
+                        $forall mtype <- readings (exp) (plate) disp_data
+                            <li>
+                                <a href=@{ReadGraph (exp) (plate) mtype}>
+                                    #{mtype}
+                                \ #
+                                <a href=@{LogReadGraph (exp) (plate) mtype}>
+                                    Log scale #{mtype}
+                                \ #
+                                <a href=@{ReadGraphCSV (exp) (plate) mtype}>
+                                    [Get data]
+                <li>
+                    Doubling times
+                    <ul>
+                        $forall mtype <- readings (exp) (plate) disp_data
+                            <li>
+                                <a href=@{DoublingTimesGraph (exp) (plate) mtype}>
+                                    #{mtype}
+                                \ #
+                                <a href=@{DoublingTimeCSV (exp) (plate) mtype}>
+                                    [Get minimal doubling times]
+                                \ #
+                                <a href=@{YieldsCSV (exp) (plate) mtype}>
+                                    [Get yields]
+                <li>
+                    Expression levels
+                    <ul>
+                        $forall mtype <- expLevels (exp) (plate) disp_data
+                            <li>
+                                <a href=@{ExpLevelGraph (exp) (plate) mtype}>
+                                    #{mtype}
+                                \ #
+                                <a href=@{ExpLevelCSV (exp) (plate) mtype}>
+                                    [Get data]
+                                \ #
+                                <a href=@{ExpLevelAtConstODCSV (exp) (plate) mtype}>
+                                    [Get expression level estimate at const OD]
+                <li>
+                    Expression level grids
+                    <ul>
+                        $forall grid <- grids (exp) (plate) disp_data
+                            <li>
+                                <a href=@{GridGraph (exp) (plate) (fst grid) (snd grid)}>
+                                    #{fst grid},#{snd grid}
+                                \ #
+                                <a href=@{GridGraphCSV (exp) (plate) (fst grid) (snd grid)}>
+                                    [Get data]
+
+                <li>
+                    Doubling time correlations
+                    <ul>
+                        $forall mtype <- expLevels (exp) (plate) disp_data
+                            <li>
+                                <a href=@{DoublingTimeExpLevel (exp) (plate) mtype}>
+                                    #{mtype},Doubling time
+                                \ #
+                                <a href=@{DoublingTimeExpLevelCSV (exp) (plate) mtype}>
+                                    [Get data]
+        <td>
+            <h4>
+                Plate layout:
+            <table border="1">
+                <th>
+                $forall x <- rows
+                    <th>
+                        #{x}
+                $forall y <- columns
+                    <tr>
+                        <th>
+                            #{y}
+                        $forall x <- rows
+                            <td>
+                                #{wellDesc wells_desc x y}

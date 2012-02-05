@@ -1,0 +1,40 @@
+<table border="1">
+    <tr>
+        <th>
+            Link
+        <th>
+            Update
+        <th>
+            Experiment time
+        <th>
+            Plate
+        <th>
+            Owner
+        <th>
+            Project
+        <th>
+            Plate description
+    $forall exp <- exp_descs
+        <tr>
+            <td>
+                <a href=@{ExpPage (pedExp exp) (pedPlate exp)}>
+                    Link
+            <td>
+                <a href=@{UpdatePlateForm (pedExp exp) (pedPlate exp)}>
+                    Update
+            <td>
+                #{pedExp exp}
+            <td>
+                #{pedPlate exp}
+            <td>
+                $maybe owner <- pedOwner exp
+                    #{owner}
+                $nothing
+                    \ #
+            <td>
+                $maybe project <- pedProject exp
+                    #{project}
+                $nothing
+                    \ #
+            <td>
+                 #{pedPlateDesc exp}

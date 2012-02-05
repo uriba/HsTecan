@@ -1,0 +1,5 @@
+<p>Plate data must be updated before you can browse the experiment.
+<form method=post action=@{UpdatePlateData eid p} enctype=#{enctype}>
+    <table>
+        ^{widget}
+    <input type="submit">

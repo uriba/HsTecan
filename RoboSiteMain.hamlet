@@ -8,88 +8,14 @@
             Login
 <h1>
         Welcome to the Robosite
-<h2> experiments list:
-<ul id="red" class="treeview-red">
-    $forall exp <- exp_descs
-        <li>
-            <span>
-                $maybe desc <- snd exp
-                        #{fst exp}: #{desc}
-                $nothing
-                        #{fst exp}
-                \ #
-            <a href=@{UpdateExpForm (fst exp)}>
-                [Update label]
-            <ul>
-               $forall plate <- plates (fst exp) disp_data
-                   <li>
-                        $maybe desc <- snd plate
-                            Plate #{fst plate}: #{desc}
-                        $nothing
-                            Plate #{fst plate}
-                    \ #
-                    <a href=@{UpdatePlateForm (fst exp) (fst plate)}>
-                        [Update label]
-                    <a href=@{UploadPlateDesc (fst exp) (fst plate)}>
-                        [Upload well labels]
-                    <ul>
-                        <li>
-                            Raw sensor readings
-                            <ul>
-                                $forall mtype <- readings (fst exp) (fst plate) disp_data
-                                    <li>
-                                        <a href=@{ReadGraph (fst exp) (fst plate) mtype}>
-                                            #{mtype}
-                                        \ #
-                                        <a href=@{LogReadGraph (fst exp) (fst plate) mtype}>
-                                            Log scale #{mtype}
-                                        \ #
-                                        <a href=@{ReadGraphCSV (fst exp) (fst plate) mtype}>
-                                            [Get data]
-                        <li>
-                            Doubling times
-                            <ul>
-                                $forall mtype <- readings (fst exp) (fst plate) disp_data
-                                    <li>
-                                        <a href=@{DoublingTimesGraph (fst exp) (fst plate) mtype}>
-                                            #{mtype}
-                                        \ #
-                                        <a href=@{DoublingTimeCSV (fst exp) (fst plate) mtype}>
-                                            [Get minimal doubling times]
-                                        \ #
-                                        <a href=@{YieldsCSV (fst exp) (fst plate) mtype}>
-                                            [Get yields]
-                        <li>
-                            Expression levels
-                            <ul>
-                                $forall mtype <- expLevels (fst exp) (fst plate) disp_data
-                                    <li>
-                                        <a href=@{ExpLevelGraph (fst exp) (fst plate) mtype}>
-                                            #{mtype}
-                                        \ #
-                                        <a href=@{ExpLevelCSV (fst exp) (fst plate) mtype}>
-                                            [Get data]
-                                        \ #
-                                        <a href=@{ExpLevelAtConstODCSV (fst exp) (fst plate) mtype}>
-                                            [Get expression level estimate at const OD]
-                        <li>
-                            Expression level grids
-                            <ul>
-                                $forall grid <- grids (fst exp) (fst plate) disp_data
-                                    <li>
-                                        <a href=@{GridGraph (fst exp) (fst plate) (fst grid) (snd grid)}>
-                                            #{fst grid},#{snd grid}
-                                        \ #
-                                        <a href=@{GridGraphCSV (fst exp) (fst plate) (fst grid) (snd grid)}>
-                                            [Get data]
-
-                        <li>
-                            Doubling time correlations
-                            <ul>
-                                $forall mtype <- expLevels (fst exp) (fst plate) disp_data
-                                    <li>
-                                        <a href=@{DoublingTimeExpLevel (fst exp) (fst plate) mtype}>
-                                            #{mtype},Doubling time
-                                        \ #
-                                        <a href=@{DoublingTimeExpLevelCSV (fst exp) (fst plate) mtype}>
-                                            [Get data]
+<table>
+    <tr>
+            <td valign="top">
+                <h2> Filter criteria:
+                <form method=get action=@{ExpsMain} enctype=#{enctype}>
+                    <table>
+                        ^{search_form}
+                    <input type="submit">
+            <td valign="top">
+                <h2> Experiments list:
+                ^{expsTable exp_descs}
