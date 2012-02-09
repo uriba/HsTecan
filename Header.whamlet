@@ -1,0 +1,10 @@
+<p class="login">
+    $maybe user <- maid
+        #{show user} #
+        <a href=@{AuthR LogoutR}>
+            Logout
+    $nothing
+        <a href=@{AuthR LoginR}>
+            Login
+
+

@@ -1,12 +1,10 @@
 /RoboSite HomeR GET
 /RoboSite/auth AuthR Auth getAuth
-/RoboSite/Exp/#ExpId/#Plate/ ExpPage GET
+/RoboSite/Exp/#ExpId/#Plate/ ExpPage GET POST
 /RoboSite/Main/ ExpsMain GET
-/RoboSite/update/#ExpId/#Plate/ UpdatePlateLabelForm GET
-/RoboSite/updatep/#ExpId/#Plate/ UpdatePlateForm GET
+/RoboSite/updatep/#String/#ExpId/#Plate/ UpdatePlateForm GET
 /RoboSite/upload/#ExpId/#Plate/ UploadPlateDesc GET
 /RoboSite/uploaded/#ExpId/#Plate/ UploadedPlateDesc POST
-/RoboSite/updated/#ExpId/#Plate/ UpdateLabel POST
 /RoboSite/updatedp/#ExpId/#Plate/ UpdatePlateData POST
 /RoboSite/graph/#ExpId/#Plate/#GraphType/Read ReadGraph GET
 /RoboSite/graph/#ExpId/#Plate/#GraphType/LogRead LogReadGraph GET

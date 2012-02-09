@@ -20,7 +20,7 @@
                 <a href=@{ExpPage (pedExp exp) (pedPlate exp)}>
                     Link
             <td>
-                <a href=@{UpdatePlateForm (pedExp exp) (pedPlate exp)}>
+                <a href=@{UpdatePlateForm "True" (pedExp exp) (pedPlate exp)}>
                     Update
             <td>
                 #{pedExp exp}

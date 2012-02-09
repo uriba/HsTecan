@@ -1,11 +1,3 @@
-<p class="login">
-    $maybe user <- maid
-        #{show user} #
-        <a href=@{AuthR LogoutR}>
-            Logout
-    $nothing
-        <a href=@{AuthR LoginR}>
-            Login
 <h1>
         Welcome to the Robosite
 <table>
@@ -16,6 +8,10 @@
                     <table>
                         ^{search_form}
                     <input type="submit">
+                <div>
+                    ^{atomFeedWidget}
             <td valign="top">
                 <h2> Experiments list:
                 ^{expsTable exp_descs}
+
+

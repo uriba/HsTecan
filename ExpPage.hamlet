@@ -1,24 +1,8 @@
-<p class="login">
-    $maybe user <- maid
-        #{show user} #
-        <a href=@{AuthR LogoutR}>
-            Logout
-    $nothing
-        <a href=@{AuthR LoginR}>
-            Login
 <h1>
         Experiment: #{exp}, Plate: #{plate}
-<h4>
-    Plate description:
-#{plate_desc}
-<a href=@{UpdatePlateLabelForm (exp) (plate)}>
-    [Update plate label]
-<a href=@{UploadPlateDesc (exp) (plate)}>
-    [Upload well labels]
-
 <table>
     <tr>
-        <td>
+        <td valign="top">
             <h4>
                 Graphs:
             <ul>
@@ -82,18 +66,29 @@
                                 \ #
                                 <a href=@{DoublingTimeExpLevelCSV (exp) (plate) mtype}>
                                     [Get data]
-        <td>
+        <td valign="top">
             <h4>
-                Plate layout:
-            <table border="1">
-                <th>
-                $forall x <- rows
-                    <th>
-                        #{x}
-                $forall y <- columns
-                    <tr>
-                        <th>
-                            #{y}
-                        $forall x <- rows
-                            <td>
-                                #{wellDesc wells_desc x y}
+                Plate description:
+            <table>
+                <tr>
+                    <td>
+                        Owner
+                    <td>
+                        #{plate_owner}
+                <tr>
+                    <td>
+                        Project
+                    <td>
+                        #{plate_project}
+                <tr>
+                    <td>
+                        Description
+                    <td>
+                        #{plate_desc}
+            <a href=@{UpdatePlateForm "True" exp plate}>
+                [Update plate data]
+
+<form method=post enctype=#{enctype}>
+    ^{widget}
+<a href=@{UploadPlateDesc (exp) (plate)}>
+    [Upload well labels from file]

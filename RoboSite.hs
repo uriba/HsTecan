@@ -3,6 +3,7 @@ import Yesod
 import Text.Hamlet
 import Text.Julius
 import Text.Cassius
+import Text.Blaze (preEscapedText)
 import Yesod.Form.Fields (fileAFormReq)
 import Yesod.Form.Jquery
 import Yesod.Auth
@@ -10,7 +11,7 @@ import Yesod.Auth.GoogleEmail
 import Database.HDBC.MySQL
 import Database.HDBC
 import Data.ByteString.UTF8 (toString)
-import Data.List (nub, find, sort, sortBy)
+import Data.List (nub, find, sort, sortBy, findIndex)
 import Data.Maybe (catMaybes, fromMaybe, fromJust)
 import Math.Combinatorics.Graph (combinationsOf)
 import Biolab.Interfaces.MySql (ExpDesc(..), PlateDesc(..), readTable, dbConnectInfo, loadExpDataDB, WellDesc(..), SelectCriteria (..), fromNullString)
@@ -32,6 +33,7 @@ import Text.ParserCombinators.Parsec (parse)
 import Data.CSV (csvFile)
 import Data.Either.Utils (forceEither, fromRight)
 import Data.Text (Text)
+import Data.Traversable (sequenceA)
 import Data.Monoid (mappend)
 import Data.ConfigFile (emptyCP, readfile, options)
 import Control.Monad.Error (runErrorT)
@@ -72,8 +74,7 @@ instance Yesod RoboSite where
     approot _ = "http://localhost/"
     authRoute _ = Just $ AuthR LoginR
     isAuthorized _ True = isMember
-    isAuthorized (UpdatePlateForm _ _) _ = isMember
-    isAuthorized (UpdatePlateLabelForm _ _) _ = isMember
+    isAuthorized (UpdatePlateForm _ _ _) _ = isMember
     isAuthorized (UploadPlateDesc _ _) _ = isMember
     isAuthorized _ _ = return Authorized
 
@@ -232,34 +233,20 @@ updateWellLabel :: ExpId -> Int -> Int -> Int -> String -> IO ()
 updateWellLabel eid p r c l = do
     db_conf <- dbConnectInfo "RoboSite.conf"
     conn <- connectMySQL db_conf
+    putStrLn $ "writing to row: " ++ show r ++ " and column: " ++ show c ++ " data:" ++ l
     _ <- run conn "INSERT INTO tecan_labels (exp_id,plate,row,col,label) VALUES (?,?,?,?,?) ON DUPLICATE KEY UPDATE label = ?" [toSql eid, toSql p, toSql r, toSql c, toSql l, toSql l]
     return ()
 
-updatePlateLabel :: ExpId -> Int -> String -> IO ()
-updatePlateLabel eid p l = do
-    db_conf <- dbConnectInfo "RoboSite.conf"
-    conn <- connectMySQL db_conf
-    _ <- run conn "INSERT INTO tecan_plates (exp_id,plate,description) VALUES (?,?,?) ON DUPLICATE KEY UPDATE description = ?" [toSql eid, toSql p, toSql l, toSql l]
-    return ()
-
-updateExpLabel :: ExpId -> String -> IO ()
-updateExpLabel eid l = do
-    db_conf <- dbConnectInfo "RoboSite.conf"
-    conn <- connectMySQL db_conf
-    _ <- run conn "INSERT INTO tecan_experiments (exp_id,description) VALUES (?,?) ON DUPLICATE KEY UPDATE description = ?" [toSql eid, toSql l, toSql l]
-    return ()
-
-data Params = Params {label :: T.Text}
-
-labelUpdateForm :: Html -> MForm RoboSite RoboSite (FormResult Params,Widget)
-labelUpdateForm = renderDivs $ Params <$> areq textField "Label" Nothing
-
-data PlateUpdateData = PlateUpdateData { pudOwner :: T.Text, pudProject :: T.Text, pudDesc :: T.Text}
+data PlateUpdateData = PlateUpdateData { pudCreateNewOwner :: Bool, pudExistingOwner :: Maybe T.Text, pudNewOwner :: Maybe T.Text, pudCreateNewProject :: Bool, pudExistingProject :: Maybe T.Text, pudNewProject :: Maybe T.Text, pudDesc :: T.Text}
 
 plateUpdateForm :: Html -> MForm RoboSite RoboSite (FormResult PlateUpdateData,Widget)
 plateUpdateForm = renderTable $ PlateUpdateData
-    <$> areq textField "Owner" Nothing
-    <*> areq textField "Project" Nothing
+    <$> areq boolField "Create new owner" (Just False)
+    <*> aopt (selectField' . fieldVals $ "owner") "Owner" Nothing
+    <*> aopt textField "New owner" Nothing
+    <*> areq boolField "Create new project" (Just False)
+    <*> aopt (selectField' . fieldVals $ "project") "Project" Nothing
+    <*> aopt textField "New project" Nothing
     <*> areq textField "Description" Nothing
 
 data ExpSelection = ExpSelection { esOwner :: Maybe Text, esProject :: Maybe Text, esEntries :: Maybe Int} deriving (Eq)
@@ -279,55 +266,52 @@ expSelectionFrom es = renderTable $ ExpSelection
         <*> aopt (selectField' . fieldVals $ "project") "Project" (esProject <$> es)
         <*> aopt intField "Entries to show" (esEntries <$> es)
 
-getUpdatePlateLabelForm :: ExpId -> Plate -> Handler RepHtml
-getUpdatePlateLabelForm eid p = updateForm eid p
-
-getUpdatePlateForm :: ExpId -> Plate -> Handler RepHtml
-getUpdatePlateForm eid p = do
+getUpdatePlateForm :: String -> ExpId -> Plate -> Handler RepHtml
+getUpdatePlateForm exists eid p = do
     ((_, widget), enctype) <- generateFormPost $ plateUpdateForm
-    defaultLayout $(whamletFile "UpdatePlateForm.whamlet")
+    defaultLayout $ do
+        if not . read $ exists
+            then [whamlet| <p>Plate data must be updated before you can browse the experiment.|]
+            else return ()
+        $(whamletFile "UpdatePlateForm.whamlet")
+
+pudErrors :: PlateUpdateData -> Maybe String
+pudErrors pud = if  valid_owner == Nothing then valid_project else valid_owner
+    where
+        valid_owner = check_valid (pudCreateNewOwner pud) (pudNewOwner pud) (pudExistingOwner pud) "owner"
+        valid_project = check_valid (pudCreateNewProject pud) (pudNewProject pud) (pudExistingProject pud) "project"
+        check_valid create_new new_val selected_val desc = 
+            if create_new
+                then if new_val == Nothing || selected_val /= Nothing
+                        then Just $ "Missing new " ++ desc ++ " name or illegal input"
+                        else Nothing
+                else if selected_val == Nothing || new_val /= Nothing
+                        then Just $ "Missing " ++ desc ++ " selection or illegal input"
+                        else Nothing
 
 postUpdatePlateData :: ExpId -> Plate -> Handler RepHtml
 postUpdatePlateData eid p = do
     ((res, widget), enctype) <- runFormPost plateUpdateForm
     case res of
         FormSuccess pud -> do
-            liftIO $ updatePlateData eid p pud
-            return "Label updated"
-            redirect RedirectTemporary $ ExpPage eid p
+            let pud_errors = pudErrors pud
+            if  pud_errors == Nothing
+                then do
+                    liftIO $ updatePlateData eid p pud
+                    return "Plate data updated"
+                    redirect RedirectTemporary $ ExpPage eid p
+                else defaultLayout [whamlet|<p>Bad input: #{fromJust pud_errors}|]
         _ -> defaultLayout [whamlet|<p>Invalid input|]
 
 updatePlateData :: ExpId -> Plate -> PlateUpdateData -> IO ()
 updatePlateData eid p pud = do
-    let updated_data = [toSql $ pudOwner pud, toSql $ pudProject pud, toSql $ pudDesc pud]
+    let owner = fromJust $ if pudCreateNewOwner pud then pudNewOwner pud else pudExistingOwner pud
+    let project = fromJust $ if pudCreateNewProject pud then pudNewProject pud else pudExistingProject pud
+    let updated_data = [toSql $ owner, toSql $ project, toSql $ pudDesc pud]
     db_conf <- dbConnectInfo "RoboSite.conf"
     conn <- connectMySQL db_conf
     _ <- run conn "INSERT INTO tecan_plates (exp_id,plate,owner,project,description) VALUES (?,?,?,?,?) ON DUPLICATE KEY UPDATE owner = ?, project = ?, description = ?" $ [toSql eid, toSql p] ++ updated_data ++ updated_data
     return ()
-
-postUpdateLabel :: ExpId -> Plate -> Handler RepHtml
-postUpdateLabel eid p = do
-    ((res, widget), enctype) <- runFormPost labelUpdateForm
-    output <-
-        case res of
-            FormMissing -> return . T.pack $ "Missing data!"
-            FormFailure _ -> return . T.pack $ "Please correct the errors below."
-            FormSuccess (Params label) -> do
-                if p == "-1"
-                    then
-                        do
-                            liftIO . updateExpLabel eid . T.unpack $ label
-                            return "Label updated"
-                    else
-                        do
-                            liftIO . updatePlateLabel eid (read p) . T.unpack $ label
-                            return "Label updated"
-    redirect RedirectTemporary HomeR
-
-updateForm :: ExpId -> Plate -> Handler RepHtml
-updateForm eid mp = do
-    ((_, widget), enctype) <- generateFormPost $ labelUpdateForm
-    defaultLayout $(whamletFile "UpdateLabelForm.whamlet")
 
 plates :: ExpId -> [GraphDesc] -> [(Plate,Maybe String)]
 plates eid gds = nub [(gdPlate x, gdPlateDesc x) | x <- gds, gdExp x == eid]
@@ -383,7 +367,57 @@ getExpPageData exp plate = do
                         well_labels)
 
 wellDesc :: [WellDesc] -> Int -> Char -> String
-wellDesc wells c r = fromMaybe "missing" . fmap wdDesc . find ((Well (toLower r) c ==) . wdWell) $ wells
+wellDesc wells c r = fromMaybe "" . fmap wdDesc . find ((Well (toLower r) c ==) . wdWell) $ wells
+
+allWells :: [(Int,Char)]
+allWells = [(c,r) |  r <- ['a'..'h'], c <- [1..12]]
+
+locateWell :: Int -> Char -> Int
+locateWell x y = fromMaybe 0 . findIndex ((x,toLower y) ==) $ allWells
+
+plateUpdateFormWidget :: [WellDesc] -> Html -> MForm RoboSite RoboSite (FormResult [Text],Widget)
+plateUpdateFormWidget wds extra = do
+    let rows = [1..12] :: [Int]
+    let columns = ['A'..'H']
+    (wRes,wViews) <- fmap unzip . mapM (\(c,r) -> mreq textField "unused" (Just . T.pack $ wellDesc wds c r)) $ allWells
+    let res = sequenceA wRes
+    let input x y = do
+        let fvid = fvId $ wViews !! locateWell x y
+        toWidget [lucius|
+##{fvid} {
+            width: 9em;
+}
+|]
+        fvInput $ wViews !! locateWell x y
+    let widget = do
+        [whamlet|
+#{extra}
+            <h4>
+                Plate layout:
+            <table border="1">
+                <th>
+                $forall x <- rows
+                    <th>
+                        #{x}
+                $forall y <- columns
+                    <tr>
+                        <th>
+                            #{y}
+                        $forall x <- rows
+                            <td>
+                                ^{input x y}
+            <input type=submit value="Update">
+            |]
+    return (res, widget)
+
+toStrings :: [Text] -> [[String]]
+toStrings [] = []
+toStrings xs = map T.unpack row : toStrings rest
+    where
+        (row,rest) = splitAt 12 xs
+
+postExpPage e p = do
+    getExpPage e p
 
 getExpPage :: ExpId -> Plate -> Handler RepHtml
 getExpPage exp plate = do
@@ -391,18 +425,27 @@ getExpPage exp plate = do
     mdata <- liftIO $ getExpPageData exp plate
     if Nothing == mdata
         then
-            redirect RedirectTemporary $ UpdatePlateForm exp plate
+            redirect RedirectTemporary $ UpdatePlateForm (show False) exp plate
         else
             do
                 let plate_desc = pedPlateDesc . fst3 . fromJust $ mdata
+                let plate_owner = fromJust . pedOwner . fst3 . fromJust $ mdata
+                let plate_project = fromJust . pedProject . fst3 . fromJust $ mdata
                 let disp_data = snd3 . fromJust $ mdata
                 let wells_desc = thd3 . fromJust $ mdata
+                ((res,widget),enctype) <- runFormPost $ plateUpdateFormWidget wells_desc
+                _ <- case res of
+                    FormSuccess vals -> do
+                        liftIO $ updatePlateLabels exp (read plate) (toStrings vals)
+                        liftIO $ putStrLn "updated plate"
+                    _ -> liftIO $ putStrLn "no data - plate not updated"
                 liftIO . putStrLn . show $ length wells_desc
                 let rows = [1..12]
                 let columns = ['A'..'H']
                 defaultLayout $ do
                     setTitle . toHtml . T.pack $ exp ++ " - " ++ plate
-                    addHamlet $(hamletFile "ExpPage.hamlet") -- concatenate exp desc to plate desc
+                    $(whamletFile "Header.whamlet")
+                    $(whamletFile "ExpPage.hamlet")
                     addCassius $(cassiusFile "RoboSiteMain.cassius")
 
 mTake :: Maybe Int -> [a] -> [a]
@@ -447,7 +490,7 @@ getExpsMain = do
         FormSuccess sd -> do
             ((_,sf),_) <- generateFormGet $ expSelectionFrom (Just sd)
             return ( sf, esOwner sd, esProject sd, esEntries sd)
-        _ -> return (first_search_form, Nothing, Nothing, Nothing)
+        _ -> return (first_search_form, Nothing, Nothing, Just 20)
     db_conf <- liftIO $ dbConnectInfo "RoboSite.conf"
     -- remove this once plates are automatically inserted to the DB.
     conn <- liftIO $ connectMySQL db_conf
@@ -461,23 +504,16 @@ getExpsMain = do
     let complete_exp_descs = exp_desc_from_plates ++ [ x | x <- exp_desc_from_readings, Nothing == find (\y -> pedExp y == pedExp x && pedPlate y == pedPlate x) exp_desc_from_plates]
     let relevant_exp_descs = filter (mEqual m_owner . fmap T.pack . pedOwner) . filter (mEqual m_project . fmap T.pack . pedProject) $ complete_exp_descs
     let exp_descs = mTake m_num . reverse . sortBy (compare `on` pedExp) $ relevant_exp_descs
+    atomFeed <- liftIO . fmap T.pack . readFile $ "AtomFeedCode.html"
+    let atomFeedWidget = toWidgetBody [hamlet|#{preEscapedText atomFeed}|]
     defaultLayout $ do
         setTitle "Robosite"
+        $(whamletFile "Header.whamlet")
         $(whamletFile "RoboSiteMain.hamlet")
-        toWidget $(juliusFile "RoboSiteMain.julius")
         toWidget $(cassiusFile "RoboSiteMain.cassius")
     
 getHomeR :: Handler RepHtml
 getHomeR = getExpsMain
-{-do
-    disp_data <- liftIO loadExps
-    maid <- maybeAuthId
-    let exp_descs =  reverse . sort . nub $ [ (gdExp x, gdExpDesc x) | x <- disp_data]
-    defaultLayout $ do
-        setTitle "Robosite"
-        addHamlet $(hamletFile "RoboSiteMain.hamlet")
-        addJulius $(juliusFile "RoboSiteMain.julius")
-        addCassius $(cassiusFile "RoboSiteMain.cassius")
--}
+
 main = do
     warpDebug 3000 RoboSite
