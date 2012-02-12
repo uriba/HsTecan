@@ -237,17 +237,18 @@ updateWellLabel eid p r c l = do
     _ <- run conn "INSERT INTO tecan_labels (exp_id,plate,row,col,label) VALUES (?,?,?,?,?) ON DUPLICATE KEY UPDATE label = ?" [toSql eid, toSql p, toSql r, toSql c, toSql l, toSql l]
     return ()
 
-data PlateUpdateData = PlateUpdateData { pudCreateNewOwner :: Bool, pudExistingOwner :: Maybe T.Text, pudNewOwner :: Maybe T.Text, pudCreateNewProject :: Bool, pudExistingProject :: Maybe T.Text, pudNewProject :: Maybe T.Text, pudDesc :: T.Text}
+data PlateUpdateData = PlateUpdateData { pudCreateNewOwner :: Bool, pudExistingOwner :: Maybe T.Text, pudNewOwner :: Maybe T.Text, pudCreateNewProject :: Bool, pudExistingProject :: Maybe T.Text, pudNewProject :: Maybe T.Text, pudDesc :: T.Text, pudExpDesc :: Maybe T.Text}
 
-emptyPlateUpdateData :: PlateUpdateData
-emptyPlateUpdateData = PlateUpdateData {
+emptyPlateUpdateData :: String -> PlateUpdateData
+emptyPlateUpdateData ed = PlateUpdateData {
                             pudCreateNewOwner=False,
                             pudNewOwner = Nothing,
                             pudExistingOwner = Nothing,
                             pudCreateNewProject = False,
                             pudExistingProject = Nothing,
                             pudNewProject = Nothing,
-                            pudDesc = ""
+                            pudDesc = "",
+                            pudExpDesc = Just . T.pack $ ed
                     }
 
 getPlateData :: ExpId -> Plate -> IO PlateUpdateData
@@ -255,18 +256,19 @@ getPlateData exp plate = do
     db_conf <- dbConnectInfo "RoboSite.conf"
     conn <- connectMySQL db_conf
     exp_desc <- quickQuery' conn "SELECT description FROM tecan_experiments WHERE exp_id = ?" [toSql exp]
+    let str_exp_desc = sqlToStr . head . head $ exp_desc
     plate_desc_list <- quickQuery' conn "SELECT owner,project,description FROM tecan_plates WHERE exp_id = ? AND plate = ?" [toSql exp, toSql plate]
     if null plate_desc_list
-        then return emptyPlateUpdateData
+        then return $ emptyPlateUpdateData str_exp_desc
         else do
             let plate_desc = head plate_desc_list
             if plate_desc !! 0 == SqlNull || plate_desc !! 1 == SqlNull
                 then
-                    return emptyPlateUpdateData
+                    return $ emptyPlateUpdateData str_exp_desc
                 else do
                     let owner = Just . T.pack . sqlToStr $ plate_desc !! 0
                     let project = Just . T.pack . sqlToStr $ plate_desc !! 1
-                    let desc = concat [sqlToStr . head . head $ exp_desc, ", ", sqlToStr $ plate_desc !! 2]
+                    let desc = sqlToStr $ plate_desc !! 2
                     return PlateUpdateData {
                             pudCreateNewOwner=False,
                             pudNewOwner = Nothing,
@@ -274,7 +276,8 @@ getPlateData exp plate = do
                             pudCreateNewProject = False,
                             pudExistingProject = project,
                             pudNewProject = Nothing,
-                            pudDesc = T.pack desc
+                            pudDesc = T.pack desc,
+                            pudExpDesc = Just . T.pack $ str_exp_desc
                     }
 
 plateUpdateForm :: PlateUpdateData -> Html -> MForm RoboSite RoboSite (FormResult PlateUpdateData,Widget)
@@ -286,6 +289,7 @@ plateUpdateForm pud = renderTable $ PlateUpdateData
     <*> aopt (selectField' . fieldVals $ "project") "Project" (Just . pudExistingProject $ pud)
     <*> aopt textField "New project" Nothing
     <*> areq textField "Description" (Just . pudDesc $ pud)
+    <*> aopt textField "Experiment description" (Just . pudExpDesc $ pud)
 
 data ExpSelection = ExpSelection { esOwner :: Maybe Text, esProject :: Maybe Text, esEntries :: Maybe Int} deriving (Eq)
 
@@ -351,6 +355,7 @@ updatePlateData eid p pud = do
     db_conf <- dbConnectInfo "RoboSite.conf"
     conn <- connectMySQL db_conf
     _ <- run conn "INSERT INTO tecan_plates (exp_id,plate,owner,project,description) VALUES (?,?,?,?,?) ON DUPLICATE KEY UPDATE owner = ?, project = ?, description = ?" $ [toSql eid, toSql p] ++ updated_data ++ updated_data
+    _ <- run conn "UPDATE tecan_experiments SET description = ? WHERE exp_id = ?" $ [toSql . fromMaybe "" . pudExpDesc $ pud,toSql eid]
     return ()
 
 plates :: ExpId -> [GraphDesc] -> [(Plate,Maybe String)]
