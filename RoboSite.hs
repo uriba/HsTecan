@@ -239,15 +239,53 @@ updateWellLabel eid p r c l = do
 
 data PlateUpdateData = PlateUpdateData { pudCreateNewOwner :: Bool, pudExistingOwner :: Maybe T.Text, pudNewOwner :: Maybe T.Text, pudCreateNewProject :: Bool, pudExistingProject :: Maybe T.Text, pudNewProject :: Maybe T.Text, pudDesc :: T.Text}
 
-plateUpdateForm :: Html -> MForm RoboSite RoboSite (FormResult PlateUpdateData,Widget)
-plateUpdateForm = renderTable $ PlateUpdateData
+emptyPlateUpdateData :: PlateUpdateData
+emptyPlateUpdateData = PlateUpdateData {
+                            pudCreateNewOwner=False,
+                            pudNewOwner = Nothing,
+                            pudExistingOwner = Nothing,
+                            pudCreateNewProject = False,
+                            pudExistingProject = Nothing,
+                            pudNewProject = Nothing,
+                            pudDesc = ""
+                    }
+
+getPlateData :: ExpId -> Plate -> IO PlateUpdateData
+getPlateData exp plate = do
+    db_conf <- dbConnectInfo "RoboSite.conf"
+    conn <- connectMySQL db_conf
+    exp_desc <- quickQuery' conn "SELECT description FROM tecan_experiments WHERE exp_id = ?" [toSql exp]
+    plate_desc_list <- quickQuery' conn "SELECT owner,project,description FROM tecan_plates WHERE exp_id = ? AND plate = ?" [toSql exp, toSql plate]
+    if null plate_desc_list
+        then return emptyPlateUpdateData
+        else do
+            let plate_desc = head plate_desc_list
+            if plate_desc !! 0 == SqlNull || plate_desc !! 1 == SqlNull
+                then
+                    return emptyPlateUpdateData
+                else do
+                    let owner = Just . T.pack . sqlToStr $ plate_desc !! 0
+                    let project = Just . T.pack . sqlToStr $ plate_desc !! 1
+                    let desc = concat [sqlToStr . head . head $ exp_desc, ", ", sqlToStr $ plate_desc !! 2]
+                    return PlateUpdateData {
+                            pudCreateNewOwner=False,
+                            pudNewOwner = Nothing,
+                            pudExistingOwner = owner,
+                            pudCreateNewProject = False,
+                            pudExistingProject = project,
+                            pudNewProject = Nothing,
+                            pudDesc = T.pack desc
+                    }
+
+plateUpdateForm :: PlateUpdateData -> Html -> MForm RoboSite RoboSite (FormResult PlateUpdateData,Widget)
+plateUpdateForm pud = renderTable $ PlateUpdateData
     <$> areq boolField "Create new owner" (Just False)
-    <*> aopt (selectField' . fieldVals $ "owner") "Owner" Nothing
+    <*> aopt (selectField' . fieldVals $ "owner") "Owner" (Just . pudExistingOwner $ pud)
     <*> aopt textField "New owner" Nothing
     <*> areq boolField "Create new project" (Just False)
-    <*> aopt (selectField' . fieldVals $ "project") "Project" Nothing
+    <*> aopt (selectField' . fieldVals $ "project") "Project" (Just . pudExistingProject $ pud)
     <*> aopt textField "New project" Nothing
-    <*> areq textField "Description" Nothing
+    <*> areq textField "Description" (Just . pudDesc $ pud)
 
 data ExpSelection = ExpSelection { esOwner :: Maybe Text, esProject :: Maybe Text, esEntries :: Maybe Int} deriving (Eq)
 
@@ -258,7 +296,7 @@ fieldVals f = do
         conn <- connectMySQL db_conf
         f_list <- quickQuery' conn ("SELECT " ++ f ++ " FROM tecan_plates") []
         return . catMaybes . map fromNullString . concat $ f_list
-    optionsPairs . map (T.pack &&& T.pack) $ db_fields
+    optionsPairs . nub . map (T.pack &&& T.pack) $ db_fields
 
 expSelectionFrom :: Maybe ExpSelection -> Html -> MForm RoboSite RoboSite (FormResult ExpSelection,Widget)
 expSelectionFrom es = renderTable $ ExpSelection
@@ -268,7 +306,8 @@ expSelectionFrom es = renderTable $ ExpSelection
 
 getUpdatePlateForm :: String -> ExpId -> Plate -> Handler RepHtml
 getUpdatePlateForm exists eid p = do
-    ((_, widget), enctype) <- generateFormPost $ plateUpdateForm
+    pud <- liftIO $ getPlateData eid p
+    ((_, widget), enctype) <- generateFormPost $ plateUpdateForm pud
     defaultLayout $ do
         if not . read $ exists
             then [whamlet| <p>Plate data must be updated before you can browse the experiment.|]
@@ -291,7 +330,8 @@ pudErrors pud = if  valid_owner == Nothing then valid_project else valid_owner
 
 postUpdatePlateData :: ExpId -> Plate -> Handler RepHtml
 postUpdatePlateData eid p = do
-    ((res, widget), enctype) <- runFormPost plateUpdateForm
+    pud <- liftIO $ getPlateData eid p
+    ((res, widget), enctype) <- runFormPost $ plateUpdateForm pud
     case res of
         FormSuccess pud -> do
             let pud_errors = pudErrors pud
@@ -347,7 +387,7 @@ getExpPageData exp plate = do
     exp_desc <- quickQuery' conn "SELECT description FROM tecan_experiments WHERE exp_id = ?" [toSql exp]
     plate_desc_list <- quickQuery' conn "SELECT owner,project,description FROM tecan_plates WHERE exp_id = ? AND plate = ?" [toSql exp, toSql plate]
     well_labels <- readTable db_conf "tecan_labels" (Just $ SelectCriteria "where exp_id = ? AND plate = ?" [toSql exp, toSql plate])
-    if null plate_desc_list || null well_labels
+    if null plate_desc_list
         then return Nothing
         else do
             let plate_desc = head plate_desc_list
