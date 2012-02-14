@@ -1,10 +1,13 @@
-<p class="login">
-    $maybe user <- maid
-        #{show user} #
-        <a href=@{AuthR LogoutR}>
-            Logout
-    $nothing
-        <a href=@{AuthR LoginR}>
-            Login
-
-
+<table width="100%">
+    <tr>
+        <td align="left">
+            <a href=@{HomeR}>
+                Home
+        <td align="right">
+            $maybe user <- maid
+                #{show user} #
+                <a href=@{AuthR LogoutR}>
+                    Logout
+            $nothing
+                <a href=@{AuthR LoginR}>
+                    Login
