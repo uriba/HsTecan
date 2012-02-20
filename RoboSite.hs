@@ -439,6 +439,7 @@ plateUpdateFormWidget wds extra = do
 #{extra}
             <h4>
                 Plate layout:
+            (BLANK - media-only wells, used to calculate and subtract background. WT - wild-type wells, used to calculate and subtract auto-fluorescence. NULL - wells to be ignored, will not be displayed in graphs.)
             <table border="1">
                 <th>
                 $forall x <- rows
