@@ -21,7 +21,9 @@ expMesTypes :: ExpData -> [String]
 expMesTypes = nub . map mType . concat . concatMap M.elems . M.elems
 
 liveWell :: [Measurement] -> Bool -- returns whether measurements taken from a given well indicate that it grew.
-liveWell ms = odLiveThreshold < (maximum . drop bubble_length . map snd $ od_vals)
+liveWell ms
+    | null ms = error "liveWell: empty input"
+    | otherwise = odLiveThreshold < (maximum . drop bubble_length . map snd $ od_vals)
     where
         bubble_length = length . takeWhile (< fromIntegral bubbleTime) . map fst . norm_od_vals $ od_vals
         od_vals = map toPoint . mesByTime "OD600" $ ms

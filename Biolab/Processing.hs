@@ -25,7 +25,7 @@ exponentialPhaseGrowthRateWindowMinutes = exponentialPhaseGrowthRateWindow / 60
 
 -- estimate max growth rate based on steepest slope of linear fit in log space of measurements given, running on a predefined length window.
 filterIrrelevantTimes :: [Point] -> Series
-filterIrrelevantTimes = G.fromList . filter ((300>) . snd) . filter ((10<) . snd)
+filterIrrelevantTimes = G.fromList . filter ((600>) . snd) . filter ((10<) . snd)
 
 fitsData :: Series -> [(Double, FitData)]
 fitsData = filter ((0.90 <)  . fdRSqr . snd) . expFitWindow exponentialPhaseGrowthRateWindow
