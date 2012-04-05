@@ -11,6 +11,7 @@
 /RoboSite/data/#ExpId/#Plate/#GraphType/Read ReadGraphCSV GET
 /RoboSite/graph/#ExpId/#Plate/#GraphType/Exp ExpLevelGraph GET
 /RoboSite/graph/#ExpId/#Plate/#GraphType/Doubling DoublingTimesGraph GET
+/RoboSite/graph/#ExpId/#Plate/DoublingToOD DoublingTimeToODGraph GET
 /RoboSite/graph/#ExpId/#Plate/#GraphType/DoublingEst DoublingTimeCSV GET
 /RoboSite/graph/#ExpId/#Plate/#GraphType/YieldEst YieldsCSV GET
 /RoboSite/data/#ExpId/#Plate/#GraphType/Exp ExpLevelCSV GET

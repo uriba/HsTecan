@@ -7,6 +7,7 @@ module RoboSiteCore.Graph (
     rawMesGraph,
     logRawMesGraph,
     doublingTimesGraph,
+    doublingTimeToODGraph,
     expLevelGraph,
     expLevelsGrid,
     doublingTimeCorrelation,
@@ -14,7 +15,7 @@ module RoboSiteCore.Graph (
 )
 
 where
-import Biolab.ExpData.Processing (doublingTimeCorrelationData, intensityGridData, rawMesData, timedDoublingTimes, timedExpLevels, normedMesData, )
+import Biolab.ExpData.Processing (doublingTimeCorrelationData, intensityGridData, rawMesData, timedDoublingTimes, timedExpLevels, normedMesData, doublingTimeToOD)
 import Biolab.ExpData (normalizePlate)
 import Biolab.Types (ProcessedData, CorrelationData, ExpData, ldMap, MType)
 import Biolab.Patches (mapFst, mapSnd)
@@ -57,6 +58,14 @@ doublingTimesGraph t = Graph {
    graphXAxis = AxisDesc "Time" Time,
    graphYAxis = AxisDesc ("Doubling time (minutes)") Values,
    graphTitle = "Doubling time - calculated based on " ++ t ++ " measurements"
+}
+
+doublingTimeToODGraph :: Graph
+doublingTimeToODGraph = Graph {
+   graphGenerator = LinePlot . doublingTimeToOD,
+   graphXAxis = AxisDesc "OD" Values,
+   graphYAxis = AxisDesc ("Doubling time (minutes)") Values,
+   graphTitle = "Doubling time as related to OD"
 }
 
 expLevelGraph :: MType -> Graph

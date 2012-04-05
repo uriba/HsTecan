@@ -32,6 +32,10 @@
                                 \ #
                                 <a href=@{YieldsCSV (exp) (plate) mtype}>
                                     [Get yields]
+                        <li>
+                            <a href=@{DoublingTimeToODGraph (exp) (plate)}>
+                                Doubling Time Vs. OD
+
                 <li>
                     Expression levels
                     <ul>

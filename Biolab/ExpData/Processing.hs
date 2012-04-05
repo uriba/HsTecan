@@ -3,6 +3,7 @@ module Biolab.ExpData.Processing (
     normedMesData,
     timedExpLevels,
     timedDoublingTimes,
+    doublingTimeToOD,
     intensityGridData,
     doublingTimeCorrelationData,
     estimatedData,
@@ -27,8 +28,11 @@ normedMesData m = rawMesData m . removeDeadWells . normalizePlate
 timedDoublingTimes :: MType -> ExpData -> ProcessedData
 timedDoublingTimes m = ldMap (removeIllegalPoints . doublingTimeMinutes) . normedMesData m
 
+doublingTimeToOD :: ExpData -> ProcessedData
+doublingTimeToOD ed = ldMap (removeIllegalPoints . doublingTimeMinutesPerOD) . normedMesData "OD600" $ ed
+
 timedExpLevels :: MType -> ExpData -> ProcessedData
-timedExpLevels "OD600" ed = ldMap (removeIllegalPoints . doublingTimeMinutesPerOD) . normedMesData "OD600" $ ed
+timedExpLevels "OD600" _ = error "timedExpLevels called with incorrect input (OD600)"
 timedExpLevels m ed = ldZip expressionLevels (normedMesData "OD600" ed) (normedMesData m ed)
 
 estimatedData :: (Series -> Double) -> MType -> ExpData -> MeasureData

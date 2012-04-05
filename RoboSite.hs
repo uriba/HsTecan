@@ -20,7 +20,7 @@ import Biolab.Interfaces.Csv (processedDataToCSV, correlationDataToCSV, measureD
 import Biolab.Types (ExpData, MeasureData, ExpId, MType, ldMap, CorrelationData, ProcessedData, Well(..))
 import Biolab.Patches (mapFst)
 import Biolab.Processing (minDoublingTimeMinutes, yield)
-import RoboSiteCore.Graph (rawMesGraph, logRawMesGraph, doublingTimesGraph, expLevelGraph, Graph(..), AxisDesc (..), AxisType (..), PlotData(..), expLevelsGrid, doublingTimeCorrelation)
+import RoboSiteCore.Graph (rawMesGraph, logRawMesGraph, doublingTimesGraph, doublingTimeToODGraph, expLevelGraph, Graph(..), AxisDesc (..), AxisType (..), PlotData(..), expLevelsGrid, doublingTimeCorrelation)
 import qualified Data.Text as T
 import qualified Data.Map as M
 import qualified Data.Vector.Generic as G
@@ -169,6 +169,9 @@ getDoublingTimeExpLevel exp plate x = getGraphPage (doublingTimeCorrelation x) e
 
 getDoublingTimesGraph :: ExpId -> Plate -> MType -> Handler RepHtml
 getDoublingTimesGraph exp plate t = getGraphPage (doublingTimesGraph t) exp plate
+
+getDoublingTimeToODGraph :: ExpId -> Plate -> Handler RepHtml
+getDoublingTimeToODGraph exp plate = getGraphPage doublingTimeToODGraph exp plate
 
 getProcessedCSV :: (MType -> ExpData -> ProcessedData) -> ExpId -> Plate -> MType -> Handler RepHtml
 getProcessedCSV process exp plate t = do
