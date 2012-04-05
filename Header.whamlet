@@ -3,6 +3,9 @@
         <td align="left">
             <a href=@{HomeR}>
                 Home
+            \ #
+            <a href=https://github.com/uriba/HsTecan/issues>
+                Bug-reports/Features-requests
         <td align="right">
             $maybe user <- maid
                 #{show user} #
