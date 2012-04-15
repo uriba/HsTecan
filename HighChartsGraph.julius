@@ -19,5 +19,23 @@
                 chart.series[x].show();
             }
         });
+        $('#infoHide').click(function() {
+            for (x in chart.series) {
+                var str = chart.series[x].name;
+                var patt = new RegExp($('#info').val())
+                if (str.match(patt)) {
+                  chart.series[x].hide();
+                }
+            }
+        });
+        $('#infoShow').click(function() {
+            for (x in chart.series) {
+                var str = chart.series[x].name;
+                var patt = new RegExp($('#info').val())
+                if (str.match(patt)) {
+                  chart.series[x].show();
+                }
+            }
+        });
     });
 

@@ -1,4 +1,8 @@
 <h1> #{title}
 <div ##{div} style="width: 1100px; height: 800px; margin: 0 auto">
+<input type="text" id="info" />
+    <button id="infoHide">Hide
+    <button id="infoShow">Show
+    <br />
 <button id="hide">Hide all
 <button id="show">Show all

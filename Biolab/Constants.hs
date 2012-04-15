@@ -21,7 +21,7 @@ maxMes = 70000
 wildTypeId = "WT" -- label of colonies that have wt bacteria (for auto-fluorescence cancellation)
 mediaId = ["BLANK", "Blank"]  -- label of colonies that have no bacteria (for background cancellation)
 
--- When subtracting background noise these are the minimal legal values.
+-- When subtracting background noise these are the minimal legal values. they should correspond to the standard deviation of the measurements, more or less, so that they will be equal to the minimal value that can be reliably obtained from a measurement.
 minValMap :: MesTypeCorrectionVals
 minValMap = fromList [("OD600",0.005), ("YFP", 20), ("MCHERRY",10),("CFP",10), ("GFP",10)]
 
