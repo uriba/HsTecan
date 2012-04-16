@@ -41,7 +41,7 @@ readExpLine m = Measurement {
 
 -- utils for outputting plot data to files
 processedDataToCSV :: ProcessedData -> String
-processedDataToCSV = exportedDataToCSV . ldMap (map show . G.toList)
+processedDataToCSV = exportedDataToCSV . ldMap (concatMap (\(x,y) -> [show x, show y]) . G.toList)
 
 correlationDataToCSV :: CorrelationData -> String
 correlationDataToCSV = exportedDataToCSV . ldMap (\(x,y) -> [show x, show y])
