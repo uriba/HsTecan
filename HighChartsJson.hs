@@ -28,19 +28,37 @@ jsonString = J.showJSON . J.toJSString
 
 chartTitle :: String -> JSObj
 chartTitle t =  ("title", J.makeObj [
+                    ("style", J.makeObj [
+                        ("color", jsonString "black"),
+                        ("fontSize", jsonString "25px")
+                    ]),
                     ("text", J.showJSON t),
                     ("x", J.showJSON (-20 :: Int))
                 ])
 
 chartSubtitle :: String -> JSObj
 chartSubtitle st =  ("subtitle", J.makeObj [
+                        ("style", J.makeObj [
+                            ("color", jsonString "black"),
+                            ("fontSize", jsonString "15px")
+                        ]),
                         ("text", J.showJSON st),
                         ("x", J.showJSON (-20 :: Int))
                     ])
 
 chartAxis :: String -> String -> Maybe String -> Maybe (Double,Double) -> JSObj
 chartAxis axis t atype m_limits =  (axis, J.makeObj $ [
+                        ("labels", J.makeObj [
+                            ("style", J.makeObj [
+                                ("color", jsonString "black"),
+                                ("fontSize", jsonString "14px")
+                            ])
+                        ]),
                         ("title", J.makeObj [
+                            ("style", J.makeObj [
+                                ("color", jsonString "black"),
+                                ("fontSize", jsonString "20px")
+                            ]),
                             ("text", jsonString t)
                         ]),
                         ("plotLines", J.showJSONs $ [

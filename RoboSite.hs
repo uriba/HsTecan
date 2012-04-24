@@ -1,4 +1,5 @@
 {-# LANGUAGE TypeFamilies, QuasiQuotes, MultiParamTypeClasses, TemplateHaskell, OverloadedStrings, TypeSynonymInstances, OverlappingInstances #-}
+import Biolab.Types (Measurement(..))
 import Yesod
 import Text.Hamlet
 import Text.Julius
@@ -134,8 +135,16 @@ postUploadedPlateDesc eid p = do
     liftIO . putStrLn . show $ parsed
     getHomeR
 
+subOD :: [Measurement] -> [Measurement]
+subOD mes = map subOd mes
+    where
+        minOd = minimum . map mVal $ mes
+        subOd m = if (mType m) == "OD600" then m {mVal = mVal m - minOd + 0.025} else m
+
 getExpData :: ExpId -> Plate -> IO ExpData
-getExpData eid plate = loadExpDataDB "RoboSite.conf" eid (read plate)
+getExpData eid plate = do
+    rawExp <- loadExpDataDB "RoboSite.conf" eid (read plate)
+    return $ ldMap subOD rawExp
 
 getMeasureDataCSV :: (MType -> ExpData -> MeasureData) -> ExpId -> Plate -> MType -> Handler RepHtml
 getMeasureDataCSV measure exp plate t = do

@@ -38,8 +38,8 @@ doublingTimeMinutesPerOD = filterIrrelevantTimes . map (\(_,fd) -> (2 ** (fdBeta
 
 minDoublingTimeMinutes :: Series -> Double
 minDoublingTimeMinutes s
-    | G.null (doublingTimeMinutes s) = 0
-    | otherwise = minimum . map (mean . take 3) . filter ((3>=) . length) . tails . map snd . G.toList . doublingTimeMinutes $ s
+    | G.length (doublingTimeMinutes s) < 3 = 0
+    | otherwise = minimum . map (mean . take 3) . filter ((3<=) . length) . tails . map snd . G.toList . doublingTimeMinutes $ s
 
 realTime :: Series -> Series
 realTime = vxMap (-(fromIntegral maturationTime) +)
