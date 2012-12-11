@@ -5,7 +5,7 @@ import Biolab.Patches (has)
 import Biolab.ExpData (expMesTypes)
 import Biolab.Types (ExpData)
 import GnuPlotUtils
-import System (getArgs)
+import System.Environment (getArgs)
 import System.Console.GetOpt
 import Data.Maybe
 import Data.List (intersect)

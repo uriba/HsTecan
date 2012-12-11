@@ -31,8 +31,8 @@ import qualified Text.JSON as J
 import Control.Applicative ((<$>), pure, (<*>))
 import HighChartsJson
 import Text.ParserCombinators.Parsec (parse)
-import Data.CSV (csvFile)
-import Data.Either.Utils (forceEither, fromRight)
+import Text.CSV (csv)
+import Data.Either.Unwrap (fromRight)
 import Data.Text (Text)
 import Data.Traversable (sequenceA)
 import Data.Monoid (mappend)
@@ -99,7 +99,7 @@ getUsers cf = do
             cp <- join $ liftIO $ readfile emptyCP cf
             users <- options cp "USERS"
             return users
-    return $ forceEither rv
+    return $ fromRight rv
 
 isMember = do
     mu <- maybeAuthId
@@ -129,8 +129,8 @@ postUploadedPlateDesc :: String -> String -> Handler RepHtml
 postUploadedPlateDesc eid p = do
     (_,files) <- runRequestBody
     liftIO . putStrLn $ "got post request for eid" ++ eid ++ " and plate:" ++ p
-    liftIO . putStrLn . show $ parse csvFile "" $ (concatMap U.toString . BS.toChunks . fileContent . snd . head $ files) ++ "\n"
-    let parsed = takeWhile (/= [""]) . fromRight . parse csvFile "" $ (concatMap U.toString . BS.toChunks . fileContent . snd . head $ files) ++ "\n"
+    liftIO . putStrLn . show $ parse csv "" $ (concatMap U.toString . BS.toChunks . fileContent . snd . head $ files) ++ "\n"
+    let parsed = takeWhile (/= [""]) . fromRight . parse csv "" $ (concatMap U.toString . BS.toChunks . fileContent . snd . head $ files) ++ "\n"
     liftIO $ updatePlateLabels eid (read p) parsed
     liftIO . putStrLn . show $ parsed
     getHomeR

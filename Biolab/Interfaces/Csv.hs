@@ -6,11 +6,12 @@ module Biolab.Interfaces.Csv (
 )
 where
 import Text.ParserCombinators.Parsec
-import Data.CSV
+import Text.CSV
 import Data.Either (rights)
 import Data.DateTime (fromSeconds, toSqlString)
 import Data.Function (on)
 import Data.Map (Map)
+import Data.Either.Unwrap (fromRight)
 import qualified Data.Map as M
 import qualified Data.Vector.Generic as G
 import Biolab.Constants (maxMes)
@@ -23,8 +24,8 @@ import Biolab.ExpData (createExpData)
 -- expId, plate, measurement_type, timestamp, column, row, label, value
 loadExpData :: FilePath -> IO ExpData
 loadExpData filename = do
-    file_data' <- parseFromFile csvFile filename
-    let file_data = head . rights . return $ file_data'
+    file_data' <- parseCSVFromFile filename
+    let file_data = fromRight file_data'
     let ms = map readExpLine $ file_data
     return . createExpData $ ms
 
@@ -61,4 +62,4 @@ labelLines :: (String, Map ColonyId [String]) -> [[String]]
 labelLines (label,lines) = zipWith (:) (repeat label) . map toLines . M.toList $ lines
 
 exportedDataToCSV :: ExportedData -> String
-exportedDataToCSV = genCsvFile . concatMap labelLines . M.toList
+exportedDataToCSV = printCSV . concatMap labelLines . M.toList

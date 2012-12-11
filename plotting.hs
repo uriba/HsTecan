@@ -11,7 +11,7 @@ import qualified Data.Vector.Unboxed as U
 import Data.DateTime
 import Data.Function
 import Data.Maybe
-import System (getArgs)
+import System.Environment (getArgs)
 import Graphics.Rendering.Plot
 import Graphics.Rendering.Plot.Gtk
 -- import Graphics.Rendering.Plot.Figure
@@ -104,7 +104,7 @@ displayLoop ed wd h = do
                 ]
             addAxis XAxis (Side Lower) $ do
                 withAxisLabel . setText $ "time [hours]"
-                setTicks Minor (Left $ length od_alphas)
+                setTicks Minor (TickNumber $ length od_alphas)
                 setGridlines Minor True
             addAxis YAxis (Side Lower) $ do
                 withAxisLabel . setText $ "Growth rate"

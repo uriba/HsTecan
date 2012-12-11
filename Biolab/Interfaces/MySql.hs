@@ -25,7 +25,7 @@ import Data.List (find)
 import Control.Monad.Error (runErrorT)
 import Control.Monad (join)
 import Control.Monad.IO.Class (liftIO)
-import Data.Either.Utils (forceEither)
+import Data.Either.Unwrap (fromRight)
 import Data.ConfigFile (emptyCP, readfile, get)
 
 -- consider adding table names to configuration file as well.
@@ -50,7 +50,7 @@ dbConnectInfo cf = do
                 mysqlUnixSocket = unixsock,
                 mysqlGroup = Nothing
             }
-    return $ forceEither rv
+    return $ fromRight rv
 
 maxVal = 70000
 
