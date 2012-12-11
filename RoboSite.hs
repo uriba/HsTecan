@@ -1,9 +1,10 @@
 {-# LANGUAGE TypeFamilies, QuasiQuotes, MultiParamTypeClasses, TemplateHaskell, OverloadedStrings, TypeSynonymInstances, OverlappingInstances #-}
+import Biolab.Types (Measurement(..))
 import Yesod
 import Text.Hamlet
 import Text.Julius
 import Text.Cassius
-import Text.Blaze (preEscapedText)
+import Text.Blaze (preEscapedToMarkup)
 import Yesod.Form.Fields (fileAFormReq)
 import Yesod.Form.Jquery
 import Yesod.Auth
@@ -38,10 +39,10 @@ import Data.Monoid (mappend)
 import Data.ConfigFile (emptyCP, readfile, options)
 import Control.Monad.Error (runErrorT)
 import Control.Arrow ((&&&))
-import Monad (join)
+import Control.Monad (join)
 import Data.Function (on)
-import Data.Tuple.Utils (fst3, snd3, thd3)
-import Char (toLower)
+import Data.Char (toLower)
+import Data.Tuple.HT (fst3,snd3,thd3)
 
 data GraphDesc = GraphDesc {gdExp :: ExpId, gdPlate :: Plate, gdMesType :: MType, gdExpDesc :: Maybe String, gdPlateDesc :: Maybe String} deriving (Show, Eq)
 
@@ -71,7 +72,7 @@ type GraphType = String
 mkYesod "RoboSite" $(parseRoutesFile "RoboRoutes")
 
 instance Yesod RoboSite where
-    approot _ = "http://localhost/"
+    approot = ApprootStatic "http://localhost/"
     authRoute _ = Just $ AuthR LoginR
     isAuthorized _ True = isMember
     isAuthorized (UpdatePlateForm _ _ _) _ = isMember
@@ -88,7 +89,7 @@ instance YesodAuth RoboSite where
     getAuthId = return . Just . credsIdent
     loginDest _ = HomeR
     logoutDest _ = HomeR
-    authPlugins =
+    authPlugins _ =
         [ authGoogleEmail ]
 
 getUsers :: FilePath -> IO [String]
@@ -115,7 +116,7 @@ uploadPlateDesc = renderTable $ pure (,) <*> fileAFormReq "CSV file to upload:"
 
 getUploadPlateDesc :: String -> String -> Handler RepHtml
 getUploadPlateDesc eid p = do
-    ((_,widget),enctype) <- generateFormPost uploadPlateDesc
+    (widget,enctype) <- generateFormPost uploadPlateDesc
     defaultLayout $(whamletFile "UploadPlateCsv.whamlet")
 
 updatePlateLabels :: ExpId -> Int -> [[String]] -> IO ()
@@ -284,37 +285,43 @@ getPlateData exp plate = do
                     }
 
 plateUpdateForm :: PlateUpdateData -> Html -> MForm RoboSite RoboSite (FormResult PlateUpdateData,Widget)
-plateUpdateForm pud = renderTable $ PlateUpdateData
-    <$> areq boolField "Create new owner" (Just False)
-    <*> aopt (selectField' . fieldVals $ "owner") "Owner" (Just . pudExistingOwner $ pud)
-    <*> aopt textField "New owner" Nothing
-    <*> areq boolField "Create new project" (Just False)
-    <*> aopt (selectField' . fieldVals $ "project") "Project" (Just . pudExistingProject $ pud)
-    <*> aopt textField "New project" Nothing
-    <*> areq textField "Description" (Just . pudDesc $ pud)
-    <*> aopt textField "Experiment description" (Just . pudExpDesc $ pud)
+plateUpdateForm pud h = do
+    owners <- fieldVals $ "owner"
+    projects <- fieldVals $ "project"
+    renderTable (PlateUpdateData
+        <$> areq boolField "Create new owner" (Just False)
+        <*> aopt (selectFieldList owners) "Owner" (Just . pudExistingOwner $ pud)
+        <*> aopt textField "New owner" Nothing
+        <*> areq boolField "Create new project" (Just False)
+        <*> aopt (selectFieldList projects) "Project" (Just . pudExistingProject $ pud)
+        <*> aopt textField "New project" Nothing
+        <*> areq textField "Description" (Just . pudDesc $ pud)
+        <*> aopt textField "Experiment description" (Just . pudExpDesc $ pud)) h
 
 data ExpSelection = ExpSelection { esOwner :: Maybe Text, esProject :: Maybe Text, esEntries :: Maybe Int} deriving (Eq)
 
-fieldVals :: String -> GGHandler RoboSite RoboSite IO (OptionList Text)
+fieldVals :: String -> MForm RoboSite RoboSite ([(Text,Text)])
 fieldVals f = do
     db_fields <- liftIO $ do
         db_conf <- dbConnectInfo "RoboSite.conf"
         conn <- connectMySQL db_conf
         f_list <- quickQuery' conn ("SELECT " ++ f ++ " FROM tecan_plates") []
         return . catMaybes . map fromNullString . concat $ f_list
-    optionsPairs . nub . map (T.pack &&& T.pack) $ db_fields
+    return $ nub . map (T.pack &&& T.pack) $ db_fields
 
 expSelectionFrom :: Maybe ExpSelection -> Html -> MForm RoboSite RoboSite (FormResult ExpSelection,Widget)
-expSelectionFrom es = renderTable $ ExpSelection
-        <$> aopt (selectField' . fieldVals $ "owner") "Owner" (esOwner <$> es)
-        <*> aopt (selectField' . fieldVals $ "project") "Project" (esProject <$> es)
-        <*> aopt intField "Entries to show" (esEntries <$> es)
+expSelectionFrom es h = do
+    owners <- fieldVals $ "owner"
+    projects <- fieldVals $ "project"
+    renderTable (ExpSelection
+        <$> aopt (selectFieldList owners) "Owner" (esOwner <$> es)
+        <*> aopt (selectFieldList projects) "Project" (esProject <$> es)
+        <*> aopt intField "Entries to show" (esEntries <$> es) ) h
 
 getUpdatePlateForm :: String -> ExpId -> Plate -> Handler RepHtml
 getUpdatePlateForm exists eid p = do
     pud <- liftIO $ getPlateData eid p
-    ((_, widget), enctype) <- generateFormPost $ plateUpdateForm pud
+    (widget, enctype) <- generateFormPost $ plateUpdateForm pud
     defaultLayout $ do
         if not . read $ exists
             then [whamlet| <p>Plate data must be updated before you can browse the experiment.|]
@@ -346,7 +353,7 @@ postUpdatePlateData eid p = do
                 then do
                     liftIO $ updatePlateData eid p pud
                     return "Plate data updated"
-                    redirect RedirectTemporary $ ExpPage eid p
+                    redirect $ ExpPage eid p
                 else defaultLayout [whamlet|<p>Bad input: #{fromJust pud_errors}|]
         _ -> defaultLayout [whamlet|<p>Invalid input|]
 
@@ -474,7 +481,7 @@ getExpPage exp plate = do
     mdata <- liftIO $ getExpPageData exp plate
     if Nothing == mdata
         then
-            redirect RedirectTemporary $ UpdatePlateForm (show False) exp plate
+            redirect $ UpdatePlateForm (show False) exp plate
         else
             do
                 let plate_desc = pedPlateDesc . fst3 . fromJust $ mdata
@@ -554,7 +561,7 @@ getExpsMain = do
     let relevant_exp_descs = filter (mEqual m_owner . fmap T.pack . pedOwner) . filter (mEqual m_project . fmap T.pack . pedProject) $ complete_exp_descs
     let exp_descs = mTake m_num . reverse . sortBy (compare `on` pedExp) $ relevant_exp_descs
     atomFeed <- liftIO . fmap T.pack . readFile $ "AtomFeedCode.html"
-    let atomFeedWidget = toWidgetBody [hamlet|#{preEscapedText atomFeed}|]
+    let atomFeedWidget = toWidgetBody [hamlet|#{preEscapedToMarkup atomFeed}|]
     defaultLayout $ do
         setTitle "Robosite"
         $(whamletFile "Header.whamlet")
