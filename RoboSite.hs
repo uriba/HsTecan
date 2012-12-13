@@ -1,8 +1,10 @@
 {-# LANGUAGE TypeFamilies, QuasiQuotes, MultiParamTypeClasses, TemplateHaskell, OverloadedStrings, TypeSynonymInstances, OverlappingInstances #-}
+import Data.Conduit.Lazy (lazyConsume)
+import Data.Conduit (runResourceT)
 import Biolab.Types (Measurement(..))
 import Yesod
-import Text.Hamlet
-import Text.Julius
+import Text.Hamlet (hamletFile)
+import Text.Julius (juliusFile)
 import Text.Cassius
 import Text.Blaze (preEscapedToMarkup)
 import Yesod.Form.Fields (fileAFormReq)
@@ -14,7 +16,6 @@ import Database.HDBC
 import Data.ByteString.UTF8 (toString)
 import Data.List (nub, find, sort, sortBy, findIndex)
 import Data.Maybe (catMaybes, fromMaybe, fromJust)
-import Math.Combinatorics.Graph (combinationsOf)
 import Biolab.Interfaces.MySql (ExpDesc(..), PlateDesc(..), readTable, dbConnectInfo, loadExpDataDB, WellDesc(..), SelectCriteria (..), fromNullString)
 import Biolab.ExpData.Processing (expressionLevelData, rawMesData, timedExpLevels, timedDoublingTimes, intensityGridData, estimatedData, doublingTimeCorrelationData)
 import Biolab.Interfaces.Csv (processedDataToCSV, correlationDataToCSV, measureDataToCSV)
@@ -129,8 +130,10 @@ postUploadedPlateDesc :: String -> String -> Handler RepHtml
 postUploadedPlateDesc eid p = do
     (_,files) <- runRequestBody
     liftIO . putStrLn $ "got post request for eid" ++ eid ++ " and plate:" ++ p
-    liftIO . putStrLn . show $ parse csv "" $ (concatMap U.toString . BS.toChunks . fileContent . snd . head $ files) ++ "\n"
-    let parsed = takeWhile (/= [""]) . fromRight . parse csv "" $ (concatMap U.toString . BS.toChunks . fileContent . snd . head $ files) ++ "\n"
+    --file_data <- liftIO $ runResourceT $ lazyConsume (fileSource . snd . head $ files)
+    let file_data = (concatMap U.toString . BS.toChunks . fileContent . snd . head $ files)
+    liftIO . putStrLn . show $ parse csv "" $ file_data ++ "\n"
+    let parsed = takeWhile (/= [""]) . fromRight . parse csv "" $ file_data ++ "\n"
     liftIO $ updatePlateLabels eid (read p) parsed
     liftIO . putStrLn . show $ parsed
     getHomeR
@@ -230,8 +233,8 @@ getGraphPage g exp plate = do
     let json_data = J.encode . J.makeObj $ chart_json
     defaultLayout $ do
         setTitle . toHtml . T.pack $ title
-        addJulius $(juliusFile "HighChartsGraph.julius")
-        addHamlet $(hamletFile "GraphPage.hamlet")
+        toWidget $(juliusFile "HighChartsGraph.julius")
+        toWidget $(hamletFile "GraphPage.hamlet")
 
 updateWellLabel :: ExpId -> Int -> Int -> Int -> String -> IO ()
 updateWellLabel eid p r c l = do
@@ -378,9 +381,13 @@ expLevels :: ExpId -> Plate -> [GraphDesc] -> [MType]
 expLevels eid p = filter (/= "OD600") . readings eid p
 
 grids :: ExpId -> Plate -> [GraphDesc] -> [(MType,MType)]
-grids e p gd = zip (map head all_pairs) (map last all_pairs)
-    where
-        all_pairs = combinationsOf 2 . expLevels e p $ gd
+grids e p gd = allPairs . expLevels e p $ gd
+
+allPairs :: [a] -> [(a,a)]
+allPairs [] = []
+allPairs [x] = []
+allPairs [x,y] = [(x,y)]
+allPairs (x:xs) = (zip xs . repeat $ x) ++ allPairs xs
 
 sqlToStr :: SqlValue -> String
 sqlToStr (SqlByteString s) = toString s
@@ -502,7 +509,7 @@ getExpPage exp plate = do
                     setTitle . toHtml . T.pack $ exp ++ " - " ++ plate
                     $(whamletFile "Header.whamlet")
                     $(whamletFile "ExpPage.hamlet")
-                    addCassius $(cassiusFile "RoboSiteMain.cassius")
+                    toWidget $(cassiusFile "RoboSiteMain.cassius")
 
 mTake :: Maybe Int -> [a] -> [a]
 mTake Nothing = id
@@ -531,7 +538,7 @@ expDescFromReading eds [SqlByteString eid,SqlInt32 p] = PageExpDesc {
     }
 
 expsTable :: [PageExpDesc] -> Widget
-expsTable exp_descs = toWidget $(hamletFile "ExpsTable.hamlet")
+expsTable exp_descs = $(whamletFile "ExpsTable.hamlet")
 
 mEqual :: (Eq a) => Maybe a -> Maybe a -> Bool
 mEqual Nothing _ = True
