@@ -134,8 +134,13 @@ postUploadedPlateDesc eid p = do
     let file_data = (concatMap U.toString . BS.toChunks . fileContent . snd . head $ files)
     liftIO . putStrLn . show $ parse csv "" $ file_data ++ "\n"
     let parsed = takeWhile (/= [""]) . fromRight . parse csv "" $ file_data ++ "\n"
-    liftIO $ updatePlateLabels eid (read p) parsed
-    liftIO . putStrLn . show $ parsed
+    if length parsed == 8 && map length parsed == replicate 8 12
+        then do 
+            liftIO $ updatePlateLabels eid (read p) parsed
+            liftIO . putStrLn . show $ parsed
+        else do
+            liftIO . putStrLn $ "Bad csv input:"
+            liftIO . putStrLn . show $ parsed
     getHomeR
 
 getExpData :: ExpId -> Plate -> IO ExpData
