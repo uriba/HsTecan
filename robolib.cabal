@@ -7,7 +7,7 @@ Build-Type:	Simple
 Cabal-Version:	>=1.2
 
 Library
-    Build-Depends:    base >= 3 && < 5, gnuplot >=0.4.2, parsec >= 3.1,
+    Build-Depends:    base >= 3 && < 6, gnuplot >=0.4.2, parsec >= 3.1,
                       utility-ht >= 0.0.8, statistics >= 0.8, datetime >= 0.2,
                       vector >= 0.9, containers >= 0.3,
                       statistics-linreg >= 0.2.1 && < 0.3, ConfigFile >= 1.1.1,
@@ -16,13 +16,13 @@ Library
 
 Executable  PlotExpData
     Main-is:	      PlotExpData.hs
-    Build-Depends:    base >= 3 && < 5, gnuplot >=0.4.2, parsec >= 3.1,
+    Build-Depends:    base >= 3 && < 6, gnuplot >=0.4.2, parsec >= 3.1,
                       utility-ht >= 0.0.8, statistics >= 0.8, datetime >= 0.2,
                       vector >= 0.9, containers >= 0.3
 
 Executable  plotting
     Main-is:	      plotting.hs
-    Build-Depends:    base >= 3 && < 5, gnuplot >=0.4.2, parsec >= 3.1,
+    Build-Depends:    base >= 3 && < 6, gnuplot >=0.4.2, parsec >= 3.1,
                       utility-ht >= 0.0.8, statistics >= 0.8, datetime >= 0.2,
                       vector >= 0.9, containers >= 0.3, either-unwrap >= 1.0,
                       utf8-string >= 0.3.6, bytestring >= 0.9, csv >= 0.1.2,
@@ -32,11 +32,11 @@ Executable  plotting
                       pango >= 0.12, cairo >= 0.12, gio >= 0.12, glib >= 0.12, gtk >= 0.12
 Executable  RoboSite
     Main-is:	      RoboSite.hs
-    Build-Depends:    base >= 3 && < 5, gnuplot >=0.4.2, parsec >= 3.1,
+    Build-Depends:    base >= 3 && < 6, gnuplot >=0.4.2, parsec >= 3.1,
                       utility-ht >= 0.0.8, statistics >= 0.8, datetime >= 0.2,
                       vector >= 0.9, containers >= 0.3, either-unwrap >= 1.0,
                       json >= 0.4.4, utf8-string >= 0.3.6, bytestring >= 0.9, csv >= 0.1.2,
                       text >= 0.11, HDBC >= 2.2, HDBC-mysql >= 0.6,
                       filepath >= 1.2, yesod-form >= 1.0 && < 1.1,
-                      yesod >= 1.0 && < 1.1, shakespeare-js >= 1.0 && < 1.1, hamlet >= 0.10 && < 1.1,
-                      shakespeare-css >= 0.10 && < 1.1, yesod-auth >= 1.0 && < 1.1 , blaze-markup >= 0.5, conduit >= 0.4 && < 0.5.2
+                      yesod >= 1.0 && < 1.1, yesod-json == 1.0.1.0, shakespeare-js == 1.0.1, hamlet >= 0.10 && < 1.1, persistent <= 0.10, yesod-persistent == 1.0.0.1, persistent-template == 0.9.0.2,
+                      shakespeare-css >= 0.10 && < 1.1, yesod-auth == 1.0.2, blaze-markup >= 0.5, blaze-html >= 0.5,conduit >= 0.4 && < 0.5.2

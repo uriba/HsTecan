@@ -19,6 +19,9 @@
                                 \ #
                                 <a href=@{ReadGraphCSV (exp) (plate) mtype}>
                                     [Get data]
+                                \ #
+                                <a href=@{ReadGraphCurveFitter (exp) (plate) mtype}>
+                                    [Get CurveFitter data]
                 <li>
                     Doubling times
                     <ul>

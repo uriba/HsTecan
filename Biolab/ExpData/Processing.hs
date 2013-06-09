@@ -16,7 +16,7 @@ import Biolab.Measurement (mesByTime, toPoint)
 import Biolab.ExpData (normalizePlate, removeDeadWells, series)
 import Biolab.Utils.Vector (Series, removeIllegalPoints)
 import Biolab.Processing (expressionLevelEstimate, expressionLevels, minDoublingTimeMinutes, doublingTimeMinutes, doublingTimeMinutesPerOD)
-import Data.Map (intersectionWith)
+import Data.Map (intersectionWith,delete)
 import Data.Function (on)
 
 rawMesData :: MType -> ExpData -> ProcessedData
@@ -44,7 +44,7 @@ expressionLevelData m ed = ldZip expressionLevelEstimate (normedMesData "OD600" 
 intensityGridData :: (MType,MType) -> ExpData -> CorrelationData
 intensityGridData ("OD600",_) _ = error "unable to calculate expression level for OD measurements"
 intensityGridData (_,"OD600") _ = error "unable to calculate expression level for OD measurements"
-intensityGridData (x,y) ed = ldZip (,) (expressionLevelData x ed) (expressionLevelData y ed)
+intensityGridData (x,y) ed = delete "NULL" $ ldZip (,) (expressionLevelData x ed)  (expressionLevelData y ed)
 
 doublingTimeCorrelationData :: MType -> ExpData -> CorrelationData
 doublingTimeCorrelationData t ed = ldZip (,) (expressionLevelData t ed) (estimatedData minDoublingTimeMinutes "OD600" ed)

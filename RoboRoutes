@@ -9,6 +9,7 @@
 /RoboSite/graph/#ExpId/#Plate/#GraphType/Read ReadGraph GET
 /RoboSite/graph/#ExpId/#Plate/#GraphType/LogRead LogReadGraph GET
 /RoboSite/data/#ExpId/#Plate/#GraphType/Read ReadGraphCSV GET
+/RoboSite/data/#ExpId/#Plate/#GraphType/CurveFitter ReadGraphCurveFitter GET
 /RoboSite/graph/#ExpId/#Plate/#GraphType/Exp ExpLevelGraph GET
 /RoboSite/graph/#ExpId/#Plate/#GraphType/Doubling DoublingTimesGraph GET
 /RoboSite/graph/#ExpId/#Plate/DoublingToOD DoublingTimeToODGraph GET

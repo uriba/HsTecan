@@ -1,7 +1,7 @@
 {-# LANGUAGE TypeFamilies, QuasiQuotes, MultiParamTypeClasses, TemplateHaskell, OverloadedStrings, TypeSynonymInstances, OverlappingInstances #-}
 import Data.Conduit.Lazy (lazyConsume)
 import Data.Conduit (runResourceT)
-import Biolab.Types (Measurement(..))
+import Biolab.Types (Measurement(..), ColonyId(..))
 import Yesod
 import Text.Hamlet (hamletFile)
 import Text.Julius (juliusFile)
@@ -14,7 +14,7 @@ import Yesod.Auth.GoogleEmail
 import Database.HDBC.MySQL
 import Database.HDBC
 import Data.ByteString.UTF8 (toString)
-import Data.List (nub, find, sort, sortBy, findIndex)
+import Data.List (nub, find, sort, sortBy, findIndex,transpose)
 import Data.Maybe (catMaybes, fromMaybe, fromJust)
 import Biolab.Interfaces.MySql (ExpDesc(..), PlateDesc(..), readTable, dbConnectInfo, loadExpDataDB, WellDesc(..), SelectCriteria (..), fromNullString)
 import Biolab.ExpData.Processing (expressionLevelData, rawMesData, timedExpLevels, timedDoublingTimes, intensityGridData, estimatedData, doublingTimeCorrelationData)
@@ -42,8 +42,9 @@ import Control.Monad.Error (runErrorT)
 import Control.Arrow ((&&&))
 import Control.Monad (join)
 import Data.Function (on)
-import Data.Char (toLower)
+import Data.Char (toLower, toUpper)
 import Data.Tuple.HT (fst3,snd3,thd3)
+import Text.CSV (printCSV)
 
 data GraphDesc = GraphDesc {gdExp :: ExpId, gdPlate :: Plate, gdMesType :: MType, gdExpDesc :: Maybe String, gdPlateDesc :: Maybe String} deriving (Show, Eq)
 
@@ -199,6 +200,24 @@ getExpLevelGraph exp plate t = getGraphPage (expLevelGraph t) exp plate
 
 getReadGraphCSV :: ExpId -> Plate -> MType -> Handler RepHtml
 getReadGraphCSV = getProcessedCSV rawMesData
+
+wellCurve :: Well -> String
+wellCurve Well {wRow=x,wColumn=y} = (toUpper x):(show y)
+
+getReadGraphCurveFitter :: ExpId -> Plate -> MType -> Handler RepHtml
+getReadGraphCurveFitter eid p mt = do
+    exp_data <- liftIO $ getExpData eid p
+    let processed = rawMesData mt exp_data
+    let lists = concatMap M.toList . M.elems $ processed
+    let headers = map (wellCurve . cWell . fst) $ lists
+    let times = map fst . G.toList . snd . head $ lists
+    let times_offset = map (\x -> x - head times) times
+    let times_offset_hour = map (/3600) times_offset
+    let vals  = map (map snd . G.toList . snd) lists
+    let all_data = transpose (times_offset_hour:vals)
+    let first_row = "TIME":headers
+    let output_data = first_row:(map (map show) all_data)
+    sendResponse (typePlain, toContent . filter (/='"') . printCSV $ output_data)
 
 getLogReadGraph :: ExpId -> Plate -> MType -> Handler RepHtml
 getLogReadGraph exp plate t = getGraphPage (logRawMesGraph t) exp plate

@@ -63,7 +63,7 @@ class DbReadable a where
 data ExpDesc = ExpDesc {edExp :: ExpId, edDesc :: String} deriving (Show)
 
 instance DbReadable ExpDesc where
-    dbRead [SqlByteString exp_id, SqlByteString desc] = 
+    dbRead [SqlByteString exp_id, _, SqlByteString desc] = 
         ExpDesc {
             edExp = toString exp_id,
             edDesc = toString desc
